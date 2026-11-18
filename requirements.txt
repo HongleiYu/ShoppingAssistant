@@ -1,0 +1,1 @@
+# Default lab uses the Python standard library only.

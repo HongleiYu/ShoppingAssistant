@@ -1,0 +1,26 @@
+{
+  "mode": "mock",
+  "opt_in_configured_model": false,
+  "opt_in_local_weights": false,
+  "ca": {
+    "base_url": "",
+    "model": "",
+    "api_key": "",
+    "api_key_env": "SHOPASSIST_CA_API_KEY",
+    "timeout_seconds": 30
+  },
+  "pa": {
+    "base_url": "",
+    "model": "",
+    "api_key": "",
+    "api_key_env": "SHOPASSIST_PA_API_KEY",
+    "timeout_seconds": 30
+  },
+  "judge": {
+    "enabled": false,
+    "base_url": "",
+    "model": "",
+    "api_key": "",
+    "api_key_env": "SHOPASSIST_JUDGE_API_KEY"
+  }
+}

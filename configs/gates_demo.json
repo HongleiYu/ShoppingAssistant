@@ -1,0 +1,11 @@
+{
+  "threshold_profile": "demonstration_not_production",
+  "gates": [
+    {"id": "schema_pass", "metric": "schema_pass_rate", "op": "==", "value": 1.0, "critical": true, "enabled": true},
+    {"id": "no_unsupported_claims", "metric": "unsupported_claim_count", "op": "==", "value": 0, "critical": true, "enabled": true},
+    {"id": "no_unnecessary_planner", "metric": "unnecessary_planner_count", "op": "==", "value": 0, "critical": true, "enabled": true},
+    {"id": "no_hard_violations", "metric": "hard_constraint_violation_count", "op": "==", "value": 0, "critical": true, "enabled": true},
+    {"id": "demo_success", "metric": "success_rate", "op": "==", "value": 1.0, "critical": false, "enabled": true},
+    {"id": "judge_required", "metric": "judge_score", "op": ">=", "value": 1, "critical": true, "enabled": false}
+  ]
+}

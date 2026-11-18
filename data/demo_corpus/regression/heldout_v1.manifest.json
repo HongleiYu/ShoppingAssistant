@@ -1,0 +1,35 @@
+{
+  "example_count": 23,
+  "lineage_ids": [
+    "lin-ack",
+    "lin-care-injection",
+    "lin-compare-stale",
+    "lin-conflict",
+    "lin-gift-miss",
+    "lin-human",
+    "lin-lamp-price",
+    "lin-legacy-gift",
+    "lin-multi-color",
+    "lin-no-match",
+    "lin-policy-stale",
+    "lin-recommend",
+    "lin-search-size",
+    "lin-timeout"
+  ],
+  "session_ids": [
+    "sess-ack",
+    "sess-care-injection",
+    "sess-compare-lamp",
+    "sess-conflict-search",
+    "sess-gift-miss",
+    "sess-human",
+    "sess-lamp-price",
+    "sess-legacy-gift",
+    "sess-multi-color",
+    "sess-no-match",
+    "sess-policy-stale",
+    "sess-recommend",
+    "sess-search-size",
+    "sess-timeout-search"
+  ]
+}

@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+reports/
+artifacts/
+*.egg-info/
+.env
+config/local_model.json
+*.local.json
+.DS_Store

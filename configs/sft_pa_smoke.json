@@ -1,0 +1,13 @@
+{
+  "role": "pa",
+  "scale": "smoke",
+  "model_path": "local/models/tiny-generic",
+  "adapter_output": "artifacts/adapters/pa-smoke",
+  "lora": {"r": 4, "alpha": 8, "dropout": 0.05, "target_modules": ["q_proj", "v_proj"]},
+  "max_steps": 1,
+  "batch_size": 1,
+  "learning_rate": 0.0001,
+  "seed": 7,
+  "device": "cpu",
+  "executed": false
+}

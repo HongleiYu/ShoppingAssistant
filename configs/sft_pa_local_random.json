@@ -1,0 +1,15 @@
+{
+  "role": "pa",
+  "scale": "smoke",
+  "backend": "local_random",
+  "model_path": "artifacts/random-init/pa",
+  "adapter_output": "artifacts/adapters/pa-random",
+  "lora": {"r": 2, "alpha": 4, "dropout": 0.0, "target_modules": ["output"]},
+  "max_steps": 2,
+  "batch_size": 1,
+  "learning_rate": 0.05,
+  "seed": 11,
+  "device": "cpu",
+  "executed": false,
+  "note": "CPU smoke on a generated tiny model. Not a quality result and not a GPU run."
+}

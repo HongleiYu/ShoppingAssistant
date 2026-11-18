@@ -1,0 +1,253 @@
+{
+  "catalog_snapshot_id": "synthetic-catalog-v1",
+  "corpus_tier": "demonstration",
+  "coverage": {
+    "card_count": 38,
+    "corpus_tier": "demonstration",
+    "missing_tags": [],
+    "not_production_sufficient": true,
+    "scenarios": {
+      "attributes_policies": {
+        "cards": 5,
+        "splits": [
+          "regression",
+          "test",
+          "train",
+          "val"
+        ],
+        "tags": [
+          "comparison",
+          "kb_policy",
+          "simple_tool",
+          "stale_record",
+          "static_attribute"
+        ]
+      },
+      "direct_answer": {
+        "cards": 1,
+        "splits": [
+          "train"
+        ],
+        "tags": [
+          "direct_answer"
+        ]
+      },
+      "irrelevant_chat": {
+        "cards": 2,
+        "splits": [
+          "train",
+          "val"
+        ],
+        "tags": [
+          "direct_answer",
+          "irrelevant"
+        ]
+      },
+      "missing_contradictory": {
+        "cards": 3,
+        "splits": [
+          "train",
+          "val"
+        ],
+        "tags": [
+          "clarification",
+          "missing_or_contradiction"
+        ]
+      },
+      "multiround_constraint_change": {
+        "cards": 2,
+        "splits": [
+          "regression",
+          "train"
+        ],
+        "tags": [
+          "constraint_change",
+          "direct_answer",
+          "static_attribute",
+          "unnecessary_planner"
+        ]
+      },
+      "no_match_out_of_stock": {
+        "cards": 2,
+        "splits": [
+          "regression",
+          "test"
+        ],
+        "tags": [
+          "fallback",
+          "no_match",
+          "out_of_stock"
+        ]
+      },
+      "realtime_price_stock": {
+        "cards": 3,
+        "splits": [
+          "regression",
+          "train",
+          "val"
+        ],
+        "tags": [
+          "dynamic_field",
+          "retry",
+          "simple_tool",
+          "stale_record"
+        ]
+      },
+      "recovery_escalation": {
+        "cards": 1,
+        "splits": [
+          "regression"
+        ],
+        "tags": [
+          "human_escalation"
+        ]
+      },
+      "retrieval_conflict": {
+        "cards": 1,
+        "splits": [
+          "test"
+        ],
+        "tags": [
+          "kb_policy",
+          "retrieval_conflict"
+        ]
+      },
+      "retrieval_empty": {
+        "cards": 1,
+        "splits": [
+          "val"
+        ],
+        "tags": [
+          "retrieval_empty"
+        ]
+      },
+      "retrieval_miss": {
+        "cards": 1,
+        "splits": [
+          "regression"
+        ],
+        "tags": [
+          "kb_policy",
+          "retrieval_miss"
+        ]
+      },
+      "retrieval_stale": {
+        "cards": 1,
+        "splits": [
+          "regression"
+        ],
+        "tags": [
+          "kb_policy",
+          "stale_record"
+        ]
+      },
+      "search_recommend_compare": {
+        "cards": 6,
+        "splits": [
+          "regression",
+          "train",
+          "val"
+        ],
+        "tags": [
+          "comparison",
+          "complex_recommendation",
+          "dynamic_field",
+          "retry",
+          "stale_record",
+          "static_attribute"
+        ]
+      },
+      "tool_evidence_faults": {
+        "cards": 4,
+        "splits": [
+          "regression",
+          "test"
+        ],
+        "tags": [
+          "fallback",
+          "human_escalation",
+          "replan",
+          "retry",
+          "tool_conflict",
+          "tool_error",
+          "tool_malformed",
+          "tool_timeout"
+        ]
+      },
+      "unnecessary_planner": {
+        "cards": 4,
+        "splits": [
+          "regression",
+          "test",
+          "train"
+        ],
+        "tags": [
+          "direct_answer",
+          "unnecessary_planner"
+        ]
+      },
+      "untrusted_injection": {
+        "cards": 1,
+        "splits": [
+          "regression"
+        ],
+        "tags": [
+          "kb_policy",
+          "simple_tool",
+          "untrusted_injection"
+        ]
+      }
+    },
+    "split_counts": {
+      "regression": 14,
+      "test": 6,
+      "train": 11,
+      "val": 7
+    }
+  },
+  "data_version": "demo-corpus-v1",
+  "example_counts": {
+    "regression": 23,
+    "test": 9,
+    "train": 18,
+    "val": 9
+  },
+  "kb_version": "synthetic-kb-v1",
+  "not_production_sufficient": true,
+  "regression_lineage_ids": [
+    "lin-ack",
+    "lin-care-injection",
+    "lin-compare-stale",
+    "lin-conflict",
+    "lin-gift-miss",
+    "lin-human",
+    "lin-lamp-price",
+    "lin-legacy-gift",
+    "lin-multi-color",
+    "lin-no-match",
+    "lin-policy-stale",
+    "lin-recommend",
+    "lin-search-size",
+    "lin-timeout"
+  ],
+  "regression_session_ids": [
+    "sess-ack",
+    "sess-care-injection",
+    "sess-compare-lamp",
+    "sess-conflict-search",
+    "sess-gift-miss",
+    "sess-human",
+    "sess-lamp-price",
+    "sess-legacy-gift",
+    "sess-multi-color",
+    "sess-no-match",
+    "sess-policy-stale",
+    "sess-recommend",
+    "sess-search-size",
+    "sess-timeout-search"
+  ],
+  "role_counts": {
+    "ca": 41,
+    "pa": 18
+  }
+}
