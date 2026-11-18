@@ -147,6 +147,36 @@ def handle_policy_lookup(arguments: dict, call) -> dict:
     }
 
 
+def handle_shipment_lookup(arguments: dict, call) -> dict:
+    raw = call("logistics.lookup", {"tracking_id": arguments.get("tracking_id") or ""})
+    data = raw["data"]
+    evidence = raw["evidence"]
+    facts = []
+    if data.get("status") == "ok" and data.get("freshness") == "current":
+        for field in ("tracking_number", "logistics_status", "eta"):
+            if data.get(field):
+                facts.append(
+                    {
+                        "field": "tracking_number" if field == "tracking_number" else field,
+                        "value": data[field],
+                        "tracking_id": data.get("tracking_number"),
+                        "product_id": None,
+                        "doc_id": None,
+                        "evidence_ids": [evidence["evidence_id"]],
+                        "record_class": "dynamic",
+                        "freshness": "current",
+                    }
+                )
+    return {
+        "status": data.get("status", "error"),
+        "items": [],
+        "facts": facts,
+        "evidence": [evidence],
+        "untrusted_text": [],
+        "data": data,
+    }
+
+
 def handle_budget_attribute_validate(arguments: dict, call) -> dict:
     del call  # pure check over already retrieved items
     filters = dict(arguments.get("filters") or {})
@@ -198,6 +228,14 @@ SPECS = [
         allowed_tools=("kb.get_policy", "kb.get_document", "kb.search"),
         handler=handle_policy_lookup,
         input_fields=("topic",),
+    ),
+    SkillSpec(
+        skill_id="shipment_lookup",
+        version="1.0.0",
+        description="Read one synthetic shipment snapshot. Does not place an order.",
+        allowed_tools=("logistics.lookup",),
+        handler=handle_shipment_lookup,
+        input_fields=("tracking_id",),
     ),
     SkillSpec(
         skill_id="budget_attribute_validate",

@@ -24,6 +24,7 @@
   },
   "mcp": {"tool_timeout_seconds": 2},
   "progress": {"pending_after_ms": 200, "milestone_min_interval_ms": 150},
+  "recovery": {"backoff_base_seconds": 0.05, "backoff_cap_seconds": 0.25, "jitter_ratio": 0.2, "honor_retry_after": true},
   "context": {
     "latest_messages": 10,
     "recent_memory_days": 7,

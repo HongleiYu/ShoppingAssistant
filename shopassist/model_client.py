@@ -50,6 +50,10 @@ class ChatCompletionsClient:
         except ConfigError:
             raise
         except Exception as exc:  # noqa: BLE001 — surface a sanitized code only
+            from shopassist.recovery import PermanentEndpointError, TransientEndpointError
+
+            if isinstance(exc, (TransientEndpointError, PermanentEndpointError)):
+                raise
             message, _ = redact_text(str(exc), [self._api_key] if self._api_key else [])
             raise ConfigError(
                 "configured_endpoint_unreachable",

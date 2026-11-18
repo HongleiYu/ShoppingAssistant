@@ -9,6 +9,7 @@ CATEGORIES = ("drinkware", "apparel", "home", "stationery")
 MATERIALS = ("ceramic", "stoneware", "steel", "cotton", "linen", "paper")
 
 _BUDGET = re.compile(r"(?:under|less than|my max is|budget to)\s+(\d+)")
+_TRACKING = re.compile(r"\b(TRK-[A-Z0-9-]+)\b", re.I)
 _CHANGE = re.compile(r"change the budget to\s+(\d+)")
 _SIZE = re.compile(r"size\s+([A-Za-z0-9]+)")
 _COLOR_IN = re.compile(r"(?:in|color|be)\s+(sand|blue|red|navy|olive|steel|natural|pink)\b")
@@ -53,6 +54,8 @@ def detect_intent(text: str) -> str:
         return "policy_warranty"
     if "shipping" in lowered:
         return "policy_shipping"
+    if "tracking " in lowered:
+        return "shipment"
     if "price" in lowered or "in stock" in lowered or "stock count" in lowered:
         return "quote"
     if lowered.startswith("change the budget"):
@@ -123,5 +126,6 @@ def extract_features(text: str, name_index: list[dict]) -> dict:
         "contradictions": contradictions,
         "topic": topic,
         "include_stale": intent == "policy_stale",
+        "tracking_id": (_TRACKING.search(text).group(1).upper() if _TRACKING.search(text) else None),
         "text": text,
     }

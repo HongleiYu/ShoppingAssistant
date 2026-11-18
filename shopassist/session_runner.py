@@ -120,6 +120,11 @@ class AgentSession:
         self.plan_registry = plan_registry or PlanRegistry()
         self.settings = settings or load_settings()
         self.budget = Budget(self.settings["loop"], clock=clock)
+        self.sleeper = None
+        self._rng = __import__("random").Random(self.settings["seed"])
+        self.budget.recovery_settings = self.settings
+        self.budget.rng = self._rng
+        self.budget.sleeper = None
         self.decider = decider
         self.cancel_event = None
         self.generation = 0
@@ -151,6 +156,11 @@ class AgentSession:
         self._progress_generation = self.generation
         try:
             self._raise_if_cancelled()
+            self.budget.begin_request()
+            self.budget.sleeper = self.sleeper
+            self.budget.cancel_event = self.cancel_event
+            self.budget.recovery_settings = self.settings
+            self.budget.rng = self._rng
             if self.mode == "configured_endpoint":
                 return self._model_message(text)
             return self._mock_message(text)
@@ -212,6 +222,13 @@ class AgentSession:
             turn["escalated"] = True
         if "terminal" not in turn:
             turn["terminal"] = _terminal_for_route(turn["route"], turn.get("escalated"))
+        from shopassist.evidence_gate import gate_turn
+
+        gated = gate_turn(turn)
+        turn["claims"] = gated["claims"]
+        turn["limitations"] = gated["limitations"]
+        turn["reply_text"] = gated["reply_text"]
+        turn["evidence_records"] = gated["records"]
         turn["memory"] = clone_memory(self.memory)
         self._publish_context(text, turn)
         self.history.append(turn)
@@ -301,19 +318,57 @@ class AgentSession:
         turn["context_view"] = self.context.public_view(assembled)
 
     def _simple_skill(self, decision: dict, turn: dict) -> dict:
-        result = self._invoke_limited(decision["skill_id"], decision.get("skill_args") or {}, turn)
-        if result is None:
-            return render_stopped((turn.get("terminal") or {}).get("reason_code") or "stopped")
-        if decision["skill_id"] == "policy_lookup":
-            turn["terminal"] = {"status": "COMPLETED", "reason_code": "validated_completion"}
-            return render_policy(result)
-        if decision["skill_id"] == "product_quote" and result["status"] == "stale":
-            turn["recovery"].append({"strategy": "retry", "because_code": "stale"})
-            args = dict(decision.get("skill_args") or {})
-            args["fresh"] = True
+        from shopassist.recovery import choose
+
+        args = dict(decision.get("skill_args") or {})
+        attempt = 0
+        fallback_count = 0
+        result = None
+        while True:
             result = self._invoke_limited(decision["skill_id"], args, turn)
             if result is None:
                 return render_stopped((turn.get("terminal") or {}).get("reason_code") or "stopped")
+            decision_recovery = choose(
+                status=result.get("status"),
+                error_code=(result.get("data") or {}).get("error_code") if isinstance(result.get("data"), dict) else None,
+                skill_id=decision["skill_id"],
+                attempt=attempt,
+                fallback_count=fallback_count,
+                limits=self._loop_limits(),
+                idempotent=True,
+                partial_streamed=self.budget.partial_streamed,
+            )
+            if decision_recovery["action"] == "retry":
+                turn["recovery"].append({"strategy": "retry", "because_code": decision_recovery["reason"]})
+                reason = self._wait_retry(attempt, None)
+                if reason:
+                    turn["terminal"] = stop_terminal(reason)
+                    return render_stopped(reason)
+                attempt += 1
+                continue
+            if decision_recovery["action"] == "refresh":
+                turn["recovery"].append({"strategy": "retry", "because_code": "stale"})
+                args["fresh"] = True
+                attempt += 1
+                continue
+            if decision_recovery["action"] == "cached_fallback":
+                turn["recovery"].append({"strategy": "fallback", "because_code": "error"})
+                args["backend"] = "cached"
+                fallback_count += 1
+                continue
+            break
+        if decision["skill_id"] == "policy_lookup":
+            if result.get("status") == "ok":
+                turn["terminal"] = {"status": "COMPLETED", "reason_code": "validated_completion"}
+            elif result.get("status") == "empty":
+                turn["terminal"] = {"status": "COMPLETED_NO_MATCH", "reason_code": "no_match"}
+            elif result.get("status") == "conflict":
+                turn["terminal"] = {"status": "COMPLETED", "reason_code": "conflicting_evidence"}
+            else:
+                turn["terminal"] = {"status": "FAILED", "reason_code": result.get("status") or "tool_error"}
+            return render_policy(result)
+        if decision["skill_id"] == "shipment_lookup":
+            return self._render_shipment(result, turn)
         if result["status"] == "conflict":
             turn["recovery"].append({"strategy": "escalate_human", "because_code": "conflict"})
             turn["escalated"] = True
@@ -331,8 +386,80 @@ class AgentSession:
             rendered = render_no_match()
             rendered["limitations"].append({"code": reason})
             return rendered
+        if result.get("status") == "empty" and decision["skill_id"] == "shipment_lookup":
+            return self._render_shipment(result, turn)
         turn["terminal"] = {"status": "COMPLETED_NO_MATCH", "reason_code": "no_match"}
         return render_no_match()
+
+    def _render_shipment(self, result: dict, turn: dict) -> dict:
+        status = result.get("status")
+        if status == "ok" and result.get("facts"):
+            turn["terminal"] = {"status": "COMPLETED", "reason_code": "validated_completion"}
+            turn["facts"] = result["facts"]
+            text_bits = []
+            for fact in result["facts"]:
+                if fact["field"] == "logistics_status":
+                    text_bits.append(f"Tracking {fact.get('tracking_id')} is {fact['value']}.")
+            rendered = {
+                "text": " ".join(text_bits) or "Logistics status is unavailable for this request.",
+                "claims": result["facts"],
+                "limitations": [],
+                "route": "simple_skill",
+                "route_reason_code": "shipment_lookup",
+            }
+            return rendered
+        if status == "empty":
+            turn["terminal"] = {"status": "COMPLETED_NO_MATCH", "reason_code": "logistics_not_in_snapshot"}
+            return {
+                "text": "The logistics snapshot has no record for that id.",
+                "claims": [],
+                "limitations": [{"code": "logistics_not_in_snapshot"}],
+                "route": "simple_skill",
+                "route_reason_code": "shipment_lookup",
+            }
+        turn["terminal"] = {"status": "FAILED", "reason_code": "logistics_unavailable"}
+        return {
+            "text": "Logistics status is unavailable for this request.",
+            "claims": [],
+            "limitations": [{"code": "logistics_unavailable"}],
+            "route": "simple_skill",
+            "route_reason_code": "shipment_lookup",
+        }
+
+    def _complete_model(self, client, messages, timeout: float | None):
+        from shopassist.config import ConfigError
+        from shopassist.recovery import PermanentEndpointError, TransientEndpointError, choose
+
+        attempt = 0
+        while True:
+            if timeout is None:
+                return None
+            try:
+                return client.complete(messages, timeout=timeout)
+            except TransientEndpointError as exc:
+                decision = choose(
+                    status=None,
+                    http_status=exc.http_status,
+                    attempt=attempt,
+                    limits=self._loop_limits(),
+                    idempotent=True,
+                    partial_streamed=self.budget.partial_streamed,
+                )
+                if decision["action"] != "retry":
+                    raise ConfigError("endpoint_transient_exhausted", {"http_status": exc.http_status, "mock_fallback": False})
+                reason = self._wait_retry(attempt, exc.retry_after)
+                if reason:
+                    return None
+                attempt += 1
+                timeout = self.budget.call_timeout(self.settings["model"]["ca"]["timeout_seconds"])
+            except PermanentEndpointError as exc:
+                raise ConfigError("endpoint_permanent", {"http_status": exc.http_status, "mock_fallback": False})
+
+    def _wait_retry(self, attempt: int, retry_after) -> str | None:
+        from shopassist.recovery import delay_seconds, wait_bounded
+
+        seconds = delay_seconds(attempt, retry_after, self.settings, self._rng)
+        return wait_bounded(seconds, self.budget, self.cancel_event, self.sleeper)
 
     def _invoke_limited(self, skill_id: str, arguments: dict, turn: dict):
         self._raise_if_cancelled()
@@ -492,7 +619,13 @@ class AgentSession:
         timeout = self.budget.call_timeout(self.settings["model"]["ca"]["timeout_seconds"])
         if timeout is None:
             raise CancelledTurn()
-        raw = self.model_clients["ca"].complete(messages, timeout=timeout)
+        raw = self._complete_model(self.model_clients["ca"], messages, timeout)
+        if raw is None:
+            memory_before = clone_memory(self.memory)
+            turn = self._blank_turn(text, memory_before, {"route": "direct_answer", "route_reason_code": "wall_clock"})
+            turn["terminal"] = stop_terminal("wall_clock")
+            turn["evaluation_kind"] = "configured_model"
+            return self._commit(text, turn, render_stopped("wall_clock"))
         token_stop = self.budget.after_model_call(getattr(self.model_clients["ca"], "last_usage", None), len(raw))
         if token_stop:
             memory_before = clone_memory(self.memory)
@@ -592,7 +725,9 @@ class AgentSession:
         timeout = self.budget.call_timeout(self.settings["model"]["pa"]["timeout_seconds"])
         if timeout is None:
             return _stopped_outcome("wall_clock")
-        raw = self.model_clients["pa"].complete(messages, timeout=timeout)
+        raw = self._complete_model(self.model_clients["pa"], messages, timeout)
+        if raw is None:
+            return _stopped_outcome("wall_clock")
         outcome = parse_pa_decision(parse_json_object(raw))
         if outcome.get("plan"):
             state["plan"] = outcome["plan"]
@@ -647,7 +782,7 @@ def _run_planner(task, sandbox, registry: PlanRegistry, decide, budget: Budget, 
         if reason:
             stopped = _stopped_outcome(reason, partial_ids(state))
             return stopped, state, public_steps
-        budget.plan_steps += 1
+        budget.note_plan_step()
         outcome = decide(task, state)
         public_steps.append(
             {
@@ -699,6 +834,15 @@ def _run_planner(task, sandbox, registry: PlanRegistry, decide, budget: Budget, 
         timeout = budget.call_timeout(tool_timeout)
         if timeout is None:
             return _stopped_outcome("wall_clock", partial_ids(state)), state, public_steps
+        if action == "retry":
+            from shopassist.recovery import delay_seconds, wait_bounded
+
+            settings = getattr(budget, "recovery_settings", None)
+            if settings is not None:
+                seconds = delay_seconds(0, None, settings, getattr(budget, "rng", None) or __import__("random").Random(0))
+                waited = wait_bounded(seconds, budget, getattr(budget, "cancel_event", None), getattr(budget, "sleeper", None))
+                if waited:
+                    return _stopped_outcome(waited, partial_ids(state)), state, public_steps
         if emit:
             emit(call["skill_id"])
         try:

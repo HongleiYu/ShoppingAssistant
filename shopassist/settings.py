@@ -91,6 +91,12 @@ DEFAULTS = {
         "pending_after_ms": 200,
         "milestone_min_interval_ms": 150,
     },
+    "recovery": {
+        "backoff_base_seconds": 0.05,
+        "backoff_cap_seconds": 0.25,
+        "jitter_ratio": 0.2,
+        "honor_retry_after": True,
+    },
     "ui": {"host": "127.0.0.1", "port": 8765, "max_body_bytes": 100000},
     "paths": {
         "corpus": "data/demo_corpus",
@@ -239,7 +245,7 @@ def _load_json(path: Path, code: str) -> dict:
 
 
 def _looks_unified(data: dict) -> bool:
-    return any(key in data for key in ("loop", "mcp", "context", "paths", "ui", "progress"))
+    return any(key in data for key in ("loop", "mcp", "context", "paths", "ui", "progress", "recovery"))
 
 
 def _from_legacy(data: dict) -> dict:
@@ -382,6 +388,11 @@ def _validate(data: dict) -> None:
     _positive("ui.max_body_bytes", data["ui"]["max_body_bytes"], minimum=1)
     _positive("progress.pending_after_ms", data["progress"]["pending_after_ms"], minimum=0)
     _positive("progress.milestone_min_interval_ms", data["progress"]["milestone_min_interval_ms"], minimum=0)
+    _positive("recovery.backoff_base_seconds", data["recovery"]["backoff_base_seconds"], minimum=0)
+    _positive("recovery.backoff_cap_seconds", data["recovery"]["backoff_cap_seconds"], minimum=0)
+    _positive("recovery.jitter_ratio", data["recovery"]["jitter_ratio"], minimum=0)
+    if data["recovery"]["jitter_ratio"] > 1 or not isinstance(data["recovery"]["honor_retry_after"], bool):
+        raise SettingsError("invalid_setting", {"path": "recovery"})
 
 
 def _positive(path: str, value, minimum: float) -> None:

@@ -102,6 +102,10 @@ class ToolServer:
             return self.catalog.attributes(arguments["product_id"])
         if tool_name == "catalog.compare":
             return self.catalog.compare(arguments["product_ids"])
+        if tool_name == "logistics.lookup":
+            from shopassist.logistics_data import lookup_shipment
+
+            return lookup_shipment(arguments["tracking_id"])
         if tool_name == "kb.get_policy":
             return self.kb.get_policy(arguments["topic"], include_stale=bool(arguments.get("include_stale", False)))
         if tool_name == "kb.get_document":
