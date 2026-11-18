@@ -87,6 +87,14 @@ class ContextRulesTest(unittest.TestCase):
                 open_store_from_env()
             self.assertIn("local_sqlite", str(caught.exception))
             self.assertIn("Refusing", str(caught.exception))
+            import sys
+            from unittest.mock import patch
+
+            with patch.dict(sys.modules, {"pymysql": None}):
+                with self.assertRaises(StoreUnavailable) as missing:
+                    open_store_from_env()
+            self.assertIn("local_sqlite", str(missing.exception))
+            self.assertIn("Refusing", str(missing.exception))
         finally:
             for key, value in previous.items():
                 if value is None:

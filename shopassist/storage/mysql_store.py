@@ -19,7 +19,9 @@ class MysqlStore:
             import pymysql
         except ImportError as exc:
             raise StoreUnavailable(
-                "MySQL mode needs the pymysql package. Refusing to use another database and call it MySQL."
+                "MySQL mode needs the pymysql package. "
+                "Install it for a real MySQL server, or set SHOPASSIST_STORE=local_sqlite. "
+                "Refusing to use another database and call it MySQL."
             ) from exc
         try:
             self._conn = pymysql.connect(
