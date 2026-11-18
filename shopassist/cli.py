@@ -286,7 +286,9 @@ def _write_json(path: str, payload: dict) -> None:
 
 
 def cmd_check_config(_args: argparse.Namespace) -> int:
-    _print(public_capabilities())
+    from shopassist.settings import public_settings
+
+    _print({"capabilities": public_capabilities(), "settings": public_settings()})
     return 0
 
 

@@ -14,15 +14,16 @@ import threading
 from datetime import datetime, timedelta, timezone
 
 from shopassist.constraints import empty_memory
+from shopassist.settings import DEFAULTS
 from shopassist.storage.caches import LocalMemoryCache, MysqlFallbackCache, RedisCache
 from shopassist.storage.errors import CacheUnavailable, StaleWriteError, StoreUnavailable
 from shopassist.storage.sqlite_store import SqliteStore
 
-LATEST_MESSAGES_DEFAULT = 10
-RECENT_DAYS = 7
-SUMMARY_MIN_NEW_MESSAGES = 4
-SUMMARY_TOKEN_BUDGET = 200
-SYNC_CATCHUP_BUDGET = 8
+LATEST_MESSAGES_DEFAULT = DEFAULTS["context"]["latest_messages"]
+RECENT_DAYS = DEFAULTS["context"]["recent_memory_days"]
+SUMMARY_MIN_NEW_MESSAGES = DEFAULTS["context"]["summary_min_new_messages"]
+SUMMARY_TOKEN_BUDGET = DEFAULTS["context"]["summary_token_budget"]
+SYNC_CATCHUP_BUDGET = DEFAULTS["context"]["sync_catchup_messages"]
 _PREFER = re.compile(r"i always prefer ([a-z]+)")
 
 
@@ -468,18 +469,23 @@ def _summary_key(tenant_id: str, session_id: str) -> str:
 
 
 def open_store_from_env():
-    mode = os.environ.get("SHOPASSIST_STORE", "local_sqlite")
+    from shopassist.settings import load_settings
+
+    settings = load_settings()
+    mode = settings["store"]["kind"]
     if mode == "local_sqlite":
-        return SqliteStore(os.environ.get("SHOPASSIST_SQLITE_PATH", ":memory:"))
+        return SqliteStore(settings["store"]["sqlite_path"])
     if mode == "mysql":
         from shopassist.storage.mysql_store import MysqlStore
 
+        mysql = settings["mysql"]
         return MysqlStore(
-            host=os.environ.get("SHOPASSIST_MYSQL_HOST", "127.0.0.1"),
-            port=int(os.environ.get("SHOPASSIST_MYSQL_PORT", "3306")),
-            user=os.environ.get("SHOPASSIST_MYSQL_USER", ""),
-            password=os.environ.get("SHOPASSIST_MYSQL_PASSWORD", ""),
-            database=os.environ.get("SHOPASSIST_MYSQL_DATABASE", "shopassist"),
+            host=mysql["host"],
+            port=int(mysql["port"]),
+            user=mysql["user"],
+            password=mysql["password"],
+            database=mysql["database"],
+            connect_timeout=float(mysql["connect_timeout_seconds"]),
         )
     raise StoreUnavailable(
         f"Unknown SHOPASSIST_STORE={mode}. Use local_sqlite or mysql. local_sqlite is the offline demo."
@@ -487,16 +493,20 @@ def open_store_from_env():
 
 
 def open_cache_from_env(store):
-    mode = os.environ.get("SHOPASSIST_CACHE", "local_memory")
+    from shopassist.settings import load_settings
+
+    settings = load_settings()
+    mode = settings["cache"]["kind"]
     if mode == "local_memory":
         return LocalMemoryCache()
     if mode == "mysql_fallback":
         return MysqlFallbackCache(store)
     if mode == "redis":
         try:
-            return RedisCache(os.environ.get("SHOPASSIST_REDIS_URL", "redis://127.0.0.1:6379/0"))
+            url = settings["cache"]["redis_url"] or "redis://127.0.0.1:6379/0"
+            return RedisCache(url, timeout=float(settings["cache"]["socket_timeout_seconds"]))
         except CacheUnavailable:
-            if os.environ.get("SHOPASSIST_CACHE_FALLBACK") == "mysql":
+            if settings["cache"]["fallback"] == "mysql":
                 return MysqlFallbackCache(store)
             raise
     raise CacheUnavailable(

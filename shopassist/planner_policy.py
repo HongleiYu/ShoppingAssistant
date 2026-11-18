@@ -132,17 +132,28 @@ def resolve_arguments(step: dict, state: dict, task: dict) -> dict:
     return {"items": items, "filters": filters_from_query(task["query"]), "evidence_id": evidence_id}
 
 
+def _limits(state: dict) -> dict:
+    supplied = state.get("limits") or {}
+    return {
+        "max_retries_per_step": int(supplied.get("max_retries_per_step", 1)),
+        "max_replans": int(supplied.get("max_replans", 1)),
+        "max_fallbacks": int(supplied.get("max_fallbacks", 1)),
+    }
+
+
 def _recover(task, state, last) -> dict:
     status = last["status"]
     step_id = last["step_id"]
     retries = state["retries"].get(step_id, 0)
+    limits = _limits(state)
     if status == "timeout":
-        if retries < 1:
+        if retries < limits["max_retries_per_step"]:
             state["retries"][step_id] = retries + 1
             return _call("retry", state["plan"], _step_by_id(state, step_id), {"strategy": "retry", "because_code": "timeout"})
         return _fail("tool_timeout", escalate=False)
     if status == "error":
-        if last.get("skill_id") == "product_search" and not state["fallback_used"]:
+        if last.get("skill_id") == "product_search" and state.get("fallback_count", 0) < limits["max_fallbacks"]:
+            state["fallback_count"] = state.get("fallback_count", 0) + 1
             state["fallback_used"] = True
             step = _step_by_id(state, step_id)
             arguments = dict(step.get("arguments") or {})
@@ -152,14 +163,15 @@ def _recover(task, state, last) -> dict:
             return _call("fallback", state["plan"], patched, {"strategy": "fallback", "because_code": "error"})
         return _fail("tool_error", escalate=False)
     if status == "malformed":
-        if not state["replanned"] and task.get("goal_type") in {"search", "recommend"}:
+        if state.get("replan_count", 0) < limits["max_replans"] and task.get("goal_type") in {"search", "recommend"}:
+            state["replan_count"] = state.get("replan_count", 0) + 1
             state["replanned"] = True
             plan = browse_plan(task)
             state["plan"] = plan
             return _call("replan", plan, plan[0], {"strategy": "replan", "because_code": "malformed"})
         return _fail("malformed_evidence", escalate=False)
     if status == "stale":
-        if retries < 1 and last.get("skill_id") == "product_quote":
+        if retries < limits["max_retries_per_step"] and last.get("skill_id") == "product_quote":
             state["retries"][step_id] = retries + 1
             step = _step_by_id(state, step_id)
             arguments = dict((step or {}).get("arguments") or last.get("arguments") or {})

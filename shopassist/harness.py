@@ -9,6 +9,11 @@ from shopassist.simulator import render_turns
 
 def evaluate_card(card: dict, mode: str = "mock", model_clients: dict | None = None) -> dict:
     texts = render_turns(card["turns"])
+    settings = None
+    if card.get("runtime"):
+        from shopassist.settings import load_settings
+
+        settings = load_settings(overrides=card["runtime"])
     trace = run_session(
         texts,
         seed=card["seed"],
@@ -16,6 +21,7 @@ def evaluate_card(card: dict, mode: str = "mock", model_clients: dict | None = N
         session_id=card["session_id"],
         mode=mode,
         model_clients=model_clients,
+        settings=settings,
     )
     score = score_trace(card["expected"], trace)
     return {

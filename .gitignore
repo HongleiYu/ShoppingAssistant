@@ -7,5 +7,6 @@ artifacts/
 *.egg-info/
 .env
 config/local_model.json
+config/local_shopassist.json
 *.local.json
 .DS_Store

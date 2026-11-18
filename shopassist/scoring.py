@@ -15,6 +15,14 @@ def score_trace(expected: dict, trace: dict) -> dict:
     routes = [turn.get("route") for turn in turns]
     if "routes" in expected and routes != expected["routes"]:
         failures.append({"check": "route", "detail": {"observed": routes, "expected": expected["routes"]}})
+    if "terminal_statuses" in expected:
+        observed_status = [(turn.get("terminal") or {}).get("status") for turn in turns]
+        if observed_status != expected["terminal_statuses"]:
+            failures.append({"check": "terminal", "detail": {"observed": observed_status}})
+    if "terminal_reasons" in expected:
+        observed_reason = [(turn.get("terminal") or {}).get("reason_code") for turn in turns]
+        if observed_reason != expected["terminal_reasons"]:
+            failures.append({"check": "terminal_reason", "detail": {"observed": observed_reason}})
     planner_turns = [index for index, turn in enumerate(turns) if turn.get("planner_invoked")]
     if "planner_turns" in expected and planner_turns != expected["planner_turns"]:
         failures.append({"check": "planner_turns", "detail": {"observed": planner_turns}})

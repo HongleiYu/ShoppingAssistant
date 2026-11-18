@@ -55,7 +55,7 @@ class LocalMemoryCache:
 class RedisCache:
     kind = "redis"
 
-    def __init__(self, url: str):
+    def __init__(self, url: str, timeout: float = 2):
         try:
             import redis
         except ImportError as exc:
@@ -63,7 +63,12 @@ class RedisCache:
                 "Redis cache selected but the redis client library is not installed. "
                 "Refusing to use the in-process cache and call it Redis."
             ) from exc
-        self._client = redis.Redis.from_url(url, decode_responses=True, socket_connect_timeout=2, socket_timeout=2)
+        self._client = redis.Redis.from_url(
+            url,
+            decode_responses=True,
+            socket_connect_timeout=timeout,
+            socket_timeout=timeout,
+        )
         try:
             self._client.ping()
         except Exception as exc:

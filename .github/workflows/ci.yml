@@ -14,6 +14,8 @@ jobs:
           python-version: "3.12"
       - name: Compile
         run: python -m compileall -q shopassist tests
+      - name: Effective config
+        run: python -m shopassist.cli check-config
       - name: SDK for protocol interop test
         run: pip install -r requirements-sdk.txt
       - name: Tests

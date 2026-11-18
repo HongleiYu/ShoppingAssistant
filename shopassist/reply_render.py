@@ -111,6 +111,21 @@ def render_items(items: list[dict], limitations: list[dict] | None = None, lead:
     return _package(" ".join(part for part in parts if part), claims, limitations, "direct_answer", "grounded_items")
 
 
+def render_stopped(reason_code: str) -> dict:
+    text = {
+        "step_budget": "I stopped because the planning step budget was reached.",
+        "tool_budget": "I stopped because the tool-call budget was reached.",
+        "model_budget": "I stopped because the model-call budget was reached.",
+        "wall_clock": "I stopped because the time budget was reached.",
+        "token_budget": "I stopped because the token budget was reached.",
+        "no_progress": "I stopped because the same lookup repeated without new evidence.",
+        "budget_exhausted": "I stopped because the tool-call budget was exhausted.",
+        "side_effect_not_retried": "I stopped instead of repeating an action that is not safe to retry.",
+        "cancelled": "I stopped because this request was cancelled.",
+    }.get(reason_code, "I stopped before completing this lookup.")
+    return _package(text, [], [_limitation(reason_code or "stopped")], "direct_answer", reason_code or "stopped")
+
+
 def render_no_match() -> dict:
     return _package(
         "No item in the catalog snapshot satisfies the confirmed constraints.",

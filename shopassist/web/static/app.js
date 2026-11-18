@@ -130,25 +130,73 @@ async function ensureSession() {
   return sessionId;
 }
 
+function parseSseBlock(block) {
+  let eventType = "message";
+  let data = "";
+  block.split("\n").forEach((line) => {
+    if (line.startsWith("event:")) eventType = line.slice(6).trim();
+    else if (line.startsWith("data:")) data += line.slice(5).trim();
+  });
+  return {event: eventType, data: data ? JSON.parse(data) : {}};
+}
+
 async function sendText(text) {
   clearError();
   setBusy(true);
   addBubble("user", text);
+  const bubble = addBubble("assistant", "");
+  const status = document.createElement("div");
+  status.className = "meta";
+  bubble.appendChild(status);
   try {
     await ensureSession();
-    const response = await fetch("/api/sessions/" + sessionId + "/message", {
+    const response = await fetch("/api/sessions/" + sessionId + "/stream", {
       method: "POST",
-      headers: {"Content-Type": "application/json"},
+      headers: {"Content-Type": "application/json", "Accept": "text/event-stream"},
       body: JSON.stringify({text}),
     });
-    const payload = await response.json();
-    if (!response.ok) {
-      showError(payload.error_code + (payload.details && payload.details.hint ? ": " + payload.details.hint : ""));
+    if (!response.ok || !response.body) {
+      showError("request_failed");
       return;
     }
-    addBubble("assistant", payload.reply_text || "");
-    showMode(payload.evaluation_kind);
-    renderSide(payload);
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    let reply = "";
+    while (true) {
+      const chunk = await reader.read();
+      if (chunk.done) break;
+      buffer += decoder.decode(chunk.value, {stream: true});
+      const blocks = buffer.split("\n\n");
+      buffer = blocks.pop();
+      blocks.forEach((block) => {
+        if (!block.trim()) return;
+        const parsed = parseSseBlock(block);
+        const payload = parsed.data;
+        if (parsed.event === "progress") {
+          status.textContent = payload.text || "";
+        } else if (parsed.event === "text_delta") {
+          if (payload.source === "buffered_fallback" || payload.source === "deterministic") {
+            reply = payload.text || "";
+          } else {
+            reply += payload.text || "";
+          }
+          bubble.childNodes[1].textContent = reply;
+        } else if (parsed.event === "clarification") {
+          reply = payload.text || "";
+          bubble.childNodes[1].textContent = reply;
+          status.textContent = "需要补充信息";
+        } else if (parsed.event === "card") {
+          renderSide({products: (payload.products || []).map((item) => ({product_id: item.product_id, price: item.price})), evidence: [], skills: [], tools: [], route: "complex_handoff", planner_invoked: true});
+        } else if (parsed.event === "done") {
+          if (payload.reply_text) bubble.childNodes[1].textContent = payload.reply_text;
+          status.textContent = payload.status === "cancelled" ? "已取消" : (payload.partial ? "未完成" : "");
+        } else if (parsed.event === "error") {
+          showError(payload.error_code || "request_failed");
+          status.textContent = "未完成";
+        }
+      });
+    }
   } catch (error) {
     showError(String(error.message || error));
   } finally {

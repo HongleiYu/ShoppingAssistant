@@ -4,7 +4,7 @@ Offline lab for a shopping **communication agent (CA)** and a **planner agent (P
 
 The default path is a deterministic mock. It does not use the network, a credential, or a GPU. A configured chat-completions endpoint is optional, explicit, and is not called by the tests or the local chat UI.
 
-Session context is a stable profile, notes from the last seven days, and the current session. The session bundle is the latest 10 messages, a summary through a watermark, and structured state. Details are in `docs/memory.md`. Evaluation uses three suites (development, regression, online sample). Those suites are separate from capability tags and from the train/val/test split; see `docs/evaluation.md`.
+Session context is a stable profile, notes from the last seven days, and the current session. The session bundle is the latest 10 messages, a summary through a watermark, and structured state. Details are in `docs/memory.md`. Evaluation uses three suites (development, regression, online sample). Those suites are separate from capability tags and from the train/val/test split; see `docs/evaluation.md`. Loop limits, model timeouts, and the 200 ms progress delay live in one settings file; see `docs/configuration.md`.
 
 This repository is a demonstration. The curated corpus is not enough to train a production model, and the passing mock report is not a measured gain from a trained model.
 
@@ -69,6 +69,7 @@ python -m shopassist.cli train --config configs/sft_ca_smoke.json --execute
 python -m shopassist.cli train --config configs/sft_ca_local_random.json --execute
 python -m shopassist.cli train --config configs/sft_pa_local_random.json --execute
 python -m shopassist.cli check-config
+# effective settings are printed with secrets redacted; defaults are config/shopassist.example.json
 python -m shopassist.cli bench --component catalog
 ```
 
