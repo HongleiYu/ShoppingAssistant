@@ -172,23 +172,117 @@ def cmd_eval_catalog(args: argparse.Namespace) -> int:
     from shopassist.eval.catalog import render_catalog_markdown, run_eval_catalog
 
     purposes = [item for item in args.purpose.split(",") if item] if args.purpose else None
-    report = run_eval_catalog(purposes)
+    suites = [item for item in args.suite.split(",") if item] if args.suite else None
+    tags = [item for item in args.tag.split(",") if item] if args.tag else None
+    case_ids = [item for item in args.case.split(",") if item] if args.case else None
+    baseline = json.loads(Path(args.baseline).read_text(encoding="utf-8")) if args.baseline else None
+    gate_config = json.loads(Path(args.gates).read_text(encoding="utf-8")) if args.gates else None
+    report = run_eval_catalog(
+        purposes,
+        suites=suites,
+        tags=tags,
+        case_ids=case_ids,
+        critical_only=args.critical_only,
+        repeat=args.repeat,
+        baseline=baseline,
+        gate_config=gate_config,
+    )
     output = Path(args.output)
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     output.with_suffix(".md").write_text(render_catalog_markdown(report), encoding="utf-8")
+    status = _catalog_status(report)
     _print(
         {
-            "status": "pass" if report["release_passed"] else "fail",
+            "status": status,
             "unique_executed": report["unique_executed"],
             "unique_catalog_cases": report["matrix"]["unique_case_count"],
             "membership_sum": report["matrix"]["membership_sum"],
-            "missing_capabilities": report["matrix"]["missing_capabilities"],
+            "membership_counts": report["matrix"]["membership_counts"],
+            "missing_tags": report["matrix"]["missing_tags"],
+            "online_sample_count": report["matrix"]["online_sample_count"],
             "production_kpi": None,
+            "production_release": False,
             "output": str(output),
         }
     )
+    return _catalog_exit(report)
+
+
+def _catalog_status(report: dict) -> str:
+    gates = report.get("gates")
+    if gates is not None:
+        return gates["status"]
+    if report["release_passed"] is None:
+        return "completed"
+    return "pass" if report["release_passed"] else "fail"
+
+
+def _catalog_exit(report: dict) -> int:
+    gates = report.get("gates")
+    if gates is not None:
+        if gates["status"] == "pass":
+            return 0
+        if gates["status"] == "unknown":
+            return 2
+        return 1
+    if report["release_passed"] is None:
+        return 0
     return 0 if report["release_passed"] else 1
+
+
+def cmd_eval_import_online(args: argparse.Namespace) -> int:
+    from shopassist.eval.catalog import ingest_deidentified
+
+    document = json.loads(Path(args.input).read_text(encoding="utf-8"))
+    try:
+        result = ingest_deidentified(document)
+    except ValueError as exc:
+        _print({"status": "fail", "error": str(exc)})
+        return 1
+    result["online_metrics"] = None
+    result["production_kpi"] = None
+    _write_json(args.output, result)
+    _print(result)
+    return 0
+
+
+def cmd_eval_archive_online(args: argparse.Namespace) -> int:
+    from shopassist.eval.catalog import archive_online_batch
+
+    document = json.loads(Path(args.input).read_text(encoding="utf-8"))
+    try:
+        archived = archive_online_batch(document, archived_at=args.archived_at)
+    except ValueError as exc:
+        _print({"status": "fail", "error": str(exc)})
+        return 1
+    _write_json(args.output, archived)
+    _print({"status": "archived", "records": len(archived["records"]), "online_metrics": None})
+    return 0
+
+
+def cmd_eval_promote(args: argparse.Namespace) -> int:
+    from shopassist.eval.catalog import build_catalog, promote_to_regression
+
+    review = json.loads(Path(args.review).read_text(encoding="utf-8"))
+    case = next((item for item in build_catalog() if item["case_id"] == args.case), None)
+    if case is None:
+        _print({"status": "fail", "error": "unknown_case"})
+        return 1
+    try:
+        promoted = promote_to_regression(case, review, new_version=args.version)
+    except ValueError as exc:
+        _print({"status": "unknown" if str(exc) == "review_decision" else "fail", "error": str(exc)})
+        return 2 if str(exc) == "review_decision" else 1
+    _write_json(args.output, {"promoted": promoted, "training_row": False})
+    _print({"status": "promoted", "case_id": promoted["case_id"], "catalog_version": promoted["catalog_version"], "critical": promoted["critical"]})
+    return 0
+
+
+def _write_json(path: str, payload: dict) -> None:
+    output = Path(path)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
 def cmd_check_config(_args: argparse.Namespace) -> int:
@@ -240,9 +334,31 @@ def build_parser() -> argparse.ArgumentParser:
     bench.add_argument("--component", default="catalog")
     bench.set_defaults(func=cmd_bench)
     catalog = sub.add_parser("eval-catalog")
-    catalog.add_argument("--purpose", default="")
+    catalog.add_argument("--purpose", default="", help="Legacy v1 purpose name. Mapped onto a suite or tag.")
+    catalog.add_argument("--suite", default="", help="development, regression, or online_sample")
+    catalog.add_argument("--tag", default="")
+    catalog.add_argument("--case", default="")
+    catalog.add_argument("--critical-only", action="store_true")
+    catalog.add_argument("--repeat", type=int, default=1)
+    catalog.add_argument("--baseline", default="")
+    catalog.add_argument("--gates", default="")
     catalog.add_argument("--output", default="reports/eval_catalog.json")
     catalog.set_defaults(func=cmd_eval_catalog)
+    importer = sub.add_parser("eval-import-online")
+    importer.add_argument("--input", required=True)
+    importer.add_argument("--output", default="reports/online_batch.json")
+    importer.set_defaults(func=cmd_eval_import_online)
+    archive = sub.add_parser("eval-archive-online")
+    archive.add_argument("--input", required=True)
+    archive.add_argument("--output", default="reports/online_archive.json")
+    archive.add_argument("--archived-at", default="1970-01-01T00:00:00Z")
+    archive.set_defaults(func=cmd_eval_archive_online)
+    promote = sub.add_parser("eval-promote")
+    promote.add_argument("--case", required=True)
+    promote.add_argument("--review", required=True)
+    promote.add_argument("--version", required=True)
+    promote.add_argument("--output", default="reports/promotion.json")
+    promote.set_defaults(func=cmd_eval_promote)
     check = sub.add_parser("check-config")
     check.set_defaults(func=cmd_check_config)
     return parser

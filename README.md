@@ -4,7 +4,7 @@ Offline lab for a shopping **communication agent (CA)** and a **planner agent (P
 
 The default path is a deterministic mock. It does not use the network, a credential, or a GPU. A configured chat-completions endpoint is optional, explicit, and is not called by the tests or the local chat UI.
 
-Session context is a stable profile, notes from the last seven days, and the current session. The session bundle is the latest 10 messages, a summary through a watermark, and structured state. Details are in `docs/memory.md`. Evaluation purposes are separate from those capabilities and from the train/val/test split; see `docs/evaluation.md`.
+Session context is a stable profile, notes from the last seven days, and the current session. The session bundle is the latest 10 messages, a summary through a watermark, and structured state. Details are in `docs/memory.md`. Evaluation uses three suites (development, regression, online sample). Those suites are separate from capability tags and from the train/val/test split; see `docs/evaluation.md`.
 
 This repository is a demonstration. The curated corpus is not enough to train a production model, and the passing mock report is not a measured gain from a trained model.
 
@@ -59,7 +59,9 @@ Other commands:
 ```bash
 python -m shopassist.cli build-corpus --output data/demo_corpus
 python -m shopassist.cli eval --mode mock --output reports/mock_eval.json
-python -m shopassist.cli eval-catalog --output reports/eval_catalog.json
+python -m shopassist.cli eval-catalog --suite development --tag memory --output reports/dev_memory.json
+python -m shopassist.cli eval-catalog --suite regression --output reports/eval_catalog.json
+python -m shopassist.cli eval-import-online --input data/eval/online_samples.example.json --output reports/online_batch.json
 python -m shopassist.cli compare --baseline baselines/mock_demo_v1.json --candidate reports/mock_eval.json --gates configs/gates_demo.json --output reports/compare.json
 python -m shopassist.cli train --config configs/sft_ca_smoke.json
 python -m shopassist.cli train --config configs/sft_pa_smoke.json
