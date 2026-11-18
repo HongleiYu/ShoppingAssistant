@@ -91,6 +91,7 @@ class ChatApp:
                 ],
                 "recovery": turn["recovery"],
                 "limitations": turn["limitations"],
+                "context_view": turn.get("context_view"),
                 "evidence": [
                     {
                         "evidence_id": item.get("evidence_id"),

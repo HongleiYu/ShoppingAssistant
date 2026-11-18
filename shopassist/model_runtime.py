@@ -68,17 +68,20 @@ def parse_json_object(text: str) -> dict:
     return payload
 
 
-def ca_messages(text: str, memory: dict, name_index: list[dict]) -> list[dict]:
+def ca_messages(text: str, memory: dict, name_index: list[dict], context_view: dict | None = None) -> list[dict]:
     names = [{"product_id": item.get("product_id"), "name": item.get("name")} for item in name_index]
+    payload = {"latest_user_turn": text, "memory": memory, "name_index": names}
+    if context_view:
+        payload["context"] = {
+            "authoritative_confirmed": (context_view.get("structured_state") or {}).get("confirmed") or {},
+            "background_summary_not_authoritative": context_view.get("summary") or {},
+            "coverage": context_view.get("coverage") or {},
+            "profile": context_view.get("profile") or {},
+            "recent_memories": context_view.get("recent_memories") or [],
+        }
     return [
         {"role": "system", "content": CA_INSTRUCTIONS},
-        {
-            "role": "user",
-            "content": json.dumps(
-                {"latest_user_turn": text, "memory": memory, "name_index": names},
-                sort_keys=True,
-            ),
-        },
+        {"role": "user", "content": json.dumps(payload, sort_keys=True)},
     ]
 
 

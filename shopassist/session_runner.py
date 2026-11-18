@@ -18,6 +18,7 @@ from shopassist.model_runtime import (
     parse_pa_decision,
 )
 from shopassist.constraints import clone_memory, empty_memory
+from shopassist.context_engine import ContextEngine
 from shopassist.planner_policy import PlanRegistry, act, new_planner_state, resolve_arguments
 from shopassist.reply_render import (
     render_clarification,
@@ -77,7 +78,7 @@ def run_session(
 
 
 class AgentSession:
-    def __init__(self, sandbox: SessionSandbox, session_id: str, mode: str = "mock", model_clients=None, plan_registry: PlanRegistry | None = None):
+    def __init__(self, sandbox: SessionSandbox, session_id: str, mode: str = "mock", model_clients=None, plan_registry: PlanRegistry | None = None, context: ContextEngine | None = None, tenant_id: str = "local", user_id: str = "local-user"):
         if mode not in {"mock", "configured_endpoint"}:
             raise ConfigError("unknown_mode", {"mode": mode})
         self.sandbox = sandbox
@@ -85,7 +86,10 @@ class AgentSession:
         self.mode = mode
         self.model_clients = model_clients
         self.plan_registry = plan_registry or PlanRegistry()
-        self.memory = empty_memory()
+        self.context = context or ContextEngine()
+        self.tenant_id = tenant_id
+        self.user_id = user_id
+        self.memory = self.context.projected_memory(tenant_id, session_id)
         self.history: list[dict] = []
         self.task_counter = 0
         self.name_index = sandbox.read_name_index()
@@ -140,8 +144,22 @@ class AgentSession:
             turn["route"] = "human_escalation"
             turn["escalated"] = True
         turn["memory"] = clone_memory(self.memory)
+        self._publish_context(text, turn)
         self.history.append(turn)
         return turn
+
+    def _publish_context(self, text: str, turn: dict) -> None:
+        if self.context is None:
+            return
+        assembled = self.context.record_exchange(
+            self.tenant_id,
+            self.user_id,
+            self.session_id,
+            text,
+            turn.get("reply_text") or "",
+            self.memory,
+        )
+        turn["context_view"] = self.context.public_view(assembled)
 
     def _simple_skill(self, decision: dict, turn: dict) -> dict:
         result = self.sandbox.invoke(decision["skill_id"], decision.get("skill_args") or {})
@@ -225,7 +243,8 @@ class AgentSession:
     def _model_message(self, text: str) -> dict:
         if "pa" not in (self.model_clients or {}) or "ca" not in (self.model_clients or {}):
             raise ConfigError("configured_model_not_ready", {"missing": ["ca", "pa"], "mock_fallback": False})
-        raw = self.model_clients["ca"].complete(ca_messages(text, self.memory, self.name_index))
+        prior = self.context.public_view(self.context.assemble(self.tenant_id, self.user_id, self.session_id))
+        raw = self.model_clients["ca"].complete(ca_messages(text, self.memory, self.name_index, prior))
         try:
             decision = parse_ca_decision(parse_json_object(raw))
         except ModelContractError:
@@ -294,6 +313,7 @@ class AgentSession:
             turn["route"] = "human_escalation"
             turn["escalated"] = True
         turn["memory"] = clone_memory(self.memory)
+        self._publish_context(text, turn)
         self.history.append(turn)
         return turn
 
@@ -327,6 +347,8 @@ class AgentSession:
 
     def reset(self) -> None:
         self.sandbox.reset()
+        if self.context is not None:
+            self.context.reset_session(self.tenant_id, self.session_id)
         self.memory = empty_memory()
         self.history = []
         self.task_counter = 0

@@ -1,5 +1,6 @@
 const transcript = document.querySelector("#transcript");
 const evidence = document.querySelector("#evidence");
+const contextPanel = document.querySelector("#context");
 const events = document.querySelector("#events");
 const scenarios = document.querySelector("#scenarios");
 const banner = document.querySelector("#banner");
@@ -46,7 +47,29 @@ function addBubble(role, text) {
   transcript.appendChild(wrap);
 }
 
+function renderContext(view) {
+  if (!contextPanel) return;
+  contextPanel.textContent = "";
+  if (!view) return;
+  const summary = view.summary || {};
+  const coverage = view.coverage || {};
+  const lines = [
+    "Store " + (view.store_kind || "") + " · cache " + (view.cache_kind || "") + " · " + (view.cache_status || ""),
+    "Summary v" + (summary.version || 0) + " through message " + (summary.watermark_message_id || 0) + " (" + (summary.source_kind || "none") + ", not authoritative)",
+    summary.text || "",
+    "Confirmed " + JSON.stringify((view.structured_state || {}).confirmed || {}),
+    "Coverage latest " + JSON.stringify(coverage.latest_message_ids || []) + " uncovered " + JSON.stringify(coverage.uncovered_message_ids || []) + " overlap " + JSON.stringify(coverage.overlap_message_ids || []),
+  ];
+  lines.forEach((line) => {
+    const row = document.createElement("div");
+    row.className = "event";
+    row.textContent = line;
+    contextPanel.appendChild(row);
+  });
+}
+
 function renderSide(turn) {
+  renderContext(turn.context_view);
   evidence.textContent = "";
   events.textContent = "";
   (turn.evidence || []).forEach((item) => {

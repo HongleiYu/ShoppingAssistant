@@ -57,6 +57,11 @@ def run_sft(config_path: str | Path, *, execute: bool = False, corpus_dir: str |
     blocked = set()
     if manifest_path.is_file():
         blocked = set(json.loads(manifest_path.read_text(encoding="utf-8")).get("session_ids") or [])
+    corpus_manifest = corpus / "manifest.json"
+    if corpus_manifest.is_file():
+        meta = json.loads(corpus_manifest.read_text(encoding="utf-8"))
+        blocked.update(meta.get("sealed_session_ids") or [])
+        blocked.update(meta.get("regression_session_ids") or [])
     train_path = corpus / "train.jsonl"
     rows = load_split(train_path, blocked) if train_path.is_file() else []
     rows = [row for row in rows if row["role"] == config["role"]]

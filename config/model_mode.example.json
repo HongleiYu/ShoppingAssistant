@@ -16,6 +16,11 @@
     "api_key_env": "SHOPASSIST_PA_API_KEY",
     "timeout_seconds": 30
   },
+  "store": "local_sqlite",
+  "cache": "local_memory",
+  "summary_mode": "mock",
+  "mysql": {"host": "127.0.0.1", "port": 3306, "user": "", "password": "", "database": "shopassist"},
+  "redis_url": "",
   "judge": {
     "enabled": false,
     "base_url": "",

@@ -567,6 +567,18 @@ def all_cards() -> list[dict]:
             tags=["complex_recommendation"],
             expected={"routes": ["complex_handoff"], "planner_turns": [0], "task_count": 1, "exact_product_ids": DRINK_UNDER_20, "final_confirmed": {"category": "drinkware", "budget": 20}, "final_assumptions": {"material": "ceramic"}, "filters_must_exclude": ["material"], "escalated": False},
         ),
+        _card(
+            "sealed-notebook",
+            scenario_id="sealed_generalization",
+            template_id="tmpl-sealed-stationery",
+            lineage_id="lin-sealed-stationery",
+            split="sealed",
+            title="Novel stationery lookup",
+            summary="A held-out combination of category, color, and budget.",
+            turns=[_one("search_color", "complex_handoff", {"category": "stationery", "color": "natural", "budget": 10})],
+            tags=["static_attribute", "dynamic_field"],
+            expected={"routes": ["complex_handoff"], "planner_turns": [0], "task_count": 1, "exact_product_ids": ["prod-note"], "final_confirmed": {"category": "stationery", "color": "natural", "budget": 10}, "final_assumptions": {}, "escalated": False},
+        ),
     ]
     return cards
 
