@@ -1,0 +1,4 @@
+# Optional. Not installed by default and not used by mock evaluation.
+torch
+transformers
+peft

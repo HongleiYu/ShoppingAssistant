@@ -1,0 +1,15 @@
+[project]
+name = "shopassist"
+version = "0.1.0"
+description = "Offline lab for a shopping communication agent and planner agent."
+requires-python = ">=3.11"
+dependencies = []
+
+[project.optional-dependencies]
+train = []
+
+[project.scripts]
+shopassist = "shopassist.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["shopassist*"]

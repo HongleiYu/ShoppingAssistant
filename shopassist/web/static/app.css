@@ -1,0 +1,62 @@
+:root {
+  color-scheme: light;
+  --ink: #1d2430;
+  --muted: #5c6778;
+  --line: #d7deE8;
+  --panel: #f6f8fb;
+  --paper: #ffffff;
+  --accent: #1f6f6a;
+  --warn: #8a3d2f;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font: 16px/1.45 "Iowan Old Style", "Palatino Linotype", Palatino, serif;
+  color: var(--ink);
+  background: var(--panel);
+}
+header.top, footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: end;
+  padding: 16px 20px;
+  background: var(--paper);
+  border-bottom: 1px solid var(--line);
+}
+footer { border-bottom: 0; border-top: 1px solid var(--line); color: var(--muted); font-size: 14px; }
+h1, h2 { font-weight: 650; margin: 0 0 4px; }
+h2 { font-size: 16px; }
+.sub, button, input, select, .meta { font-family: "Avenir Next", "Segoe UI", sans-serif; }
+.sub { margin: 0; color: var(--muted); }
+.controls { display: flex; gap: 12px; align-items: end; }
+label { display: grid; gap: 4px; font-size: 13px; color: var(--muted); }
+select, input, button {
+  font-size: 15px;
+  border: 1px solid var(--line);
+  background: white;
+  color: var(--ink);
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+button { background: var(--accent); color: white; border: 0; cursor: pointer; }
+button:disabled { opacity: 0.6; cursor: wait; }
+.banner { margin: 12px 20px 0; padding: 10px 12px; background: #fde8e4; color: var(--warn); border-radius: 8px; }
+main { display: grid; grid-template-columns: 280px 1fr 300px; gap: 16px; padding: 16px 20px 24px; }
+aside, .chat { background: var(--paper); border: 1px solid var(--line); border-radius: 12px; padding: 12px; min-height: 70vh; }
+#scenarios { display: grid; gap: 8px; max-height: 68vh; overflow: auto; }
+.scenario { text-align: left; background: white; color: var(--ink); border: 1px solid var(--line); }
+.scenario small { display: block; color: var(--muted); }
+#transcript { min-height: 52vh; display: grid; align-content: start; gap: 10px; }
+.bubble { padding: 10px 12px; border-radius: 10px; max-width: 90%; }
+.bubble.user { background: #e7f3f2; margin-left: auto; }
+.bubble.assistant { background: #f3f5f8; }
+.who { font-family: "Avenir Next", "Segoe UI", sans-serif; font-size: 12px; color: var(--muted); }
+#composer { display: flex; gap: 8px; margin-top: 12px; }
+#message { flex: 1; }
+.event, .product { font-family: "Avenir Next", "Segoe UI", sans-serif; font-size: 13px; padding: 6px 0; border-bottom: 1px solid var(--line); }
+.untrusted { white-space: pre-wrap; background: #fff8e8; padding: 8px; border-radius: 8px; }
+@media (max-width: 900px) {
+  main { grid-template-columns: 1fr; }
+  aside, .chat { min-height: auto; }
+}

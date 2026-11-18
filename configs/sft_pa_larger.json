@@ -1,0 +1,14 @@
+{
+  "role": "pa",
+  "scale": "larger",
+  "model_path": "local/models/base-generic",
+  "adapter_output": "artifacts/adapters/pa-larger",
+  "lora": {"r": 16, "alpha": 32, "dropout": 0.05, "target_modules": ["q_proj", "k_proj", "v_proj", "o_proj"]},
+  "max_steps": 200,
+  "batch_size": 2,
+  "learning_rate": 0.00005,
+  "seed": 7,
+  "device": "cpu",
+  "executed": false,
+  "note": "Configuration only. Optimizer training is not run by the default commands."
+}

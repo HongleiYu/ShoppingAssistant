@@ -1,1 +1,146 @@
-# ShoppingAssistant
+# Shopping assistant lab
+
+Offline lab for a shopping **communication agent (CA)** and a **planner agent (PA)**. The CA decides whether to answer, ask a clarifying question, call a simple skill, hand off a complex task, or escalate to a person. The PA keeps a per-task plan with dependencies, calls skills, and checks evidence. Session memory outlives a single task. A task's working state does not.
+
+The default path is a deterministic mock. It does not use the network, a credential, or a GPU. A configured chat-completions endpoint is optional, explicit, and is not called by the tests or the local chat UI.
+
+This repository is a demonstration. The curated corpus is not enough to train a production model, and the passing mock report is not a measured gain from a trained model.
+
+## Status
+
+| Area | State |
+| --- | --- |
+| Versioned CA/PA examples, synthetic catalog, synthetic knowledge base | Implemented |
+| Local MCP tool server and client (framed JSON-RPC over stdio) | Implemented and covered by transport tests |
+| Skills for search, quote, compare, policy lookup, and constraint checks | Implemented; the runtime calls them through MCP |
+| Resettable per-session tool process, fault injection, replay log | Implemented |
+| Mock multi-turn regression with outcome checks | Implemented and run in this lab |
+| Supervised-tuning configs and dry-run | Implemented; optimizer steps were not run |
+| Larger-model and GPU training | Config only; not run and not verified |
+| Preference or reward training | Roadmap only; calling it raises `NotImplementedError` |
+| Optional local judge | Rubric only; score stays null and is not a pass |
+| Configured model endpoint | Adapter and config schema exist; no live call was made |
+| Local chat UI | Implemented against the mock runtime |
+
+## Flow
+
+```mermaid
+flowchart LR
+  cards[Scenario cards] --> sim[User simulator]
+  sim --> sandbox[Session sandbox]
+  catalog[Catalog module] --> mcp[MCP server]
+  kb[Knowledge module] --> mcp
+  sandbox --> mcp
+  ca[Communication agent] --> skills[Skills]
+  pa[Planner agent] --> skills
+  skills --> mcp
+  sandbox --> traces[Traces and outcome scores]
+  traces --> report[JSON and markdown report]
+  examples[Demonstration SFT examples] --> dry[Training dry-run]
+```
+
+## Quickstart
+
+Python 3.11+ is enough. No third-party packages are required.
+
+```bash
+python -m shopassist.cli quickstart
+python -m unittest discover -s tests -v
+python -m shopassist.web.server --host 127.0.0.1 --port 8765
+```
+
+`quickstart` rebuilds the demonstration corpus, runs the mock evaluation, and dry-runs both smoke training configs. It writes `reports/quickstart.json` and `reports/quickstart.md`. Reports are local artifacts and are not the trained-model result.
+
+Other commands:
+
+```bash
+python -m shopassist.cli build-corpus --output data/demo_corpus
+python -m shopassist.cli eval --mode mock --output reports/mock_eval.json
+python -m shopassist.cli compare --baseline baselines/mock_demo_v1.json --candidate reports/mock_eval.json --gates configs/gates_demo.json --output reports/compare.json
+python -m shopassist.cli train --config configs/sft_ca_smoke.json
+python -m shopassist.cli train --config configs/sft_pa_smoke.json
+python -m shopassist.cli train --config configs/sft_ca_smoke.json --execute
+python -m shopassist.cli check-config
+python -m shopassist.cli bench --component catalog
+```
+
+`--execute` returns a non-success status when the local model directory is absent. It does not fall back to the mock and then report a successful training run. The larger configs under `configs/sft_*_larger.json` raise the rank and the step count; they were not executed here.
+
+A missing baseline is a blocked compare, not a pass. An unavailable judge stays null. Gates live in `configs/gates_demo.json` and are marked `demonstration_not_production`.
+
+## 中文说明
+
+这是一个离线的购物助手实验工程。沟通代理负责理解用户、直接回答、澄清、简单查询、转人工，或把复杂任务交给规划代理。规划代理维护带依赖的任务计划，并通过技能调用工具。简单致谢和闲聊不会进入规划代理。
+
+默认是确定性的模拟模式，不需要网络、密钥或显卡。演示语料很小，不能当作正式训练已经充分。本环境没有执行优化器训练，也没有调用配置好的模型端点。
+
+```bash
+python -m shopassist.cli quickstart
+python -m unittest discover -s tests -v
+python -m shopassist.web.server --host 127.0.0.1 --port 8765
+```
+
+可选的模型模式需要同时设置 `SHOPASSIST_MODE=configured_endpoint` 和 `SHOPASSIST_OPT_IN_CONFIGURED_MODEL=yes`，并分别提供沟通代理与规划代理的地址和模型名。密钥只放在环境变量或被 git 忽略的 `config/local_model.json` 里。本地聊天页面不会发起该调用。
+
+## Layout
+
+| Path | Role |
+| --- | --- |
+| `shopassist/catalog.py` | Replaceable product snapshot: ids, static attributes, dynamic price, currency, stock |
+| `shopassist/knowledge.py` | Replaceable policy documents with ids, freshness, and provenance |
+| `shopassist/mcp/` | MCP server and client |
+| `shopassist/skills/` | Versioned skill contracts |
+| `shopassist/sandbox.py` | Per-session tool process and workspace |
+| `shopassist/session_runner.py` | Multi-turn CA/PA runtime |
+| `shopassist/cards.py` | Scenario gallery and outcome checks |
+| `shopassist/corpus.py` | Train, validation, test, and held-out regression export |
+| `shopassist/training.py` | SFT entrypoints |
+| `shopassist/eval/` | Reports, gates, judge hook |
+| `shopassist/web/` | Local chat UI |
+| `docs/` | Architecture, contracts, data, scenarios, evaluation, sandbox |
+
+## Schemas
+
+CA examples use `ca.v1`. PA examples use `pa.v1`. A turn separates confirmed constraints, assumptions, and missing fields. Targets contain the route or plan, tool or skill calls, claims, limitations, and recovery. They do not contain a hidden reasoning field.
+
+User text is rendered by `shopassist/simulator.py` from scenario slots. That module does not read plans or tool payloads. Tool facts are filled by the catalog and knowledge snapshots through MCP.
+
+The held-out regression split is excluded from the training export. Splits are grouped by session id and by template lineage so one family does not land in two splits. See `docs/data.md`.
+
+## Optional endpoint configuration
+
+Copy `config/model_mode.example.json` to `config/local_model.json` if you want a local file. That destination is gitignored. Leave values blank to stay on the mock.
+
+Environment variables, all optional:
+
+| Variable | Purpose |
+| --- | --- |
+| `SHOPASSIST_MODE` | `mock` (default), `configured_endpoint`, or `local_weights` |
+| `SHOPASSIST_OPT_IN_CONFIGURED_MODEL` | Must be `yes` before a configured endpoint is eligible |
+| `SHOPASSIST_CA_BASE_URL` | CA chat-completions base URL |
+| `SHOPASSIST_CA_MODEL` | CA model name |
+| `SHOPASSIST_CA_API_KEY` | CA credential, if the endpoint requires one |
+| `SHOPASSIST_PA_BASE_URL` | PA base URL |
+| `SHOPASSIST_PA_MODEL` | PA model name |
+| `SHOPASSIST_PA_API_KEY` | PA credential, if the endpoint requires one |
+
+The lab never ships a real credential. Local URLs may omit a credential. Non-local URLs must use the environment variable named above, not a credential embedded in the URL. Errors report missing variable names and whether a credential is present. They do not echo the value. The local chat UI does not call a configured endpoint.
+
+## Chat UI
+
+Open `http://127.0.0.1:8765` after starting the server. Scenario buttons run the same card harness as the regression scorer. Free text uses the mock session. The page shows the reply, products, skill events, and tool status. Document text is labeled as untrusted data. The page does not use browser storage, and the server binds to loopback unless you choose another host. Do not expose it publicly.
+
+## Hardware and dependencies
+
+- Default: CPython 3.11 or newer, CPU, no extra packages, no network.
+- Optional training libraries are listed in `requirements-train.txt`. They are not installed by the default commands.
+- A real optimizer run also needs a local model directory such as `local/models/tiny-generic`. That directory is not included.
+- No container or cgroup limit is applied. See `docs/sandbox.md` for the threat model. This process boundary is not a secure sandbox for arbitrary code.
+
+## Suggested repository description
+
+Offline lab for a shopping communication agent and planner, with synthetic catalog and knowledge data, a local tool protocol, skills, and a small chat UI.
+
+## License
+
+No license file is added here.

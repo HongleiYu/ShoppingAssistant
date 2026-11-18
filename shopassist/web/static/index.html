@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Shopping assistant lab</title>
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+  <header class="top">
+    <div>
+      <h1>Shopping assistant lab</h1>
+      <p class="sub">Local mock demo. Observable routes, skills, and tool evidence only.</p>
+    </div>
+    <div class="controls">
+      <label>Mode
+        <select id="mode">
+          <option value="mock" selected>Mock demo</option>
+          <option value="configured_endpoint">Configured model</option>
+        </select>
+      </label>
+      <button id="reset" type="button">Reset</button>
+    </div>
+  </header>
+  <div id="banner" class="banner" hidden></div>
+  <main>
+    <aside>
+      <h2>Scenarios</h2>
+      <div id="scenarios"></div>
+    </aside>
+    <section class="chat">
+      <div id="transcript" aria-live="polite"></div>
+      <form id="composer">
+        <input id="message" name="message" autocomplete="off" placeholder="Ask about an item, a policy, or a comparison">
+        <button id="send" type="submit">Send</button>
+      </form>
+    </section>
+    <aside>
+      <h2>Evidence</h2>
+      <div id="evidence"></div>
+      <h2>Events</h2>
+      <div id="events"></div>
+    </aside>
+  </main>
+  <footer>Local only. Nothing is written to browser storage. Do not expose this process publicly.</footer>
+  <script src="/static/app.js"></script>
+</body>
+</html>

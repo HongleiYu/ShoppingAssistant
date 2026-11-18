@@ -1,0 +1,221 @@
+{
+  "currency_default": "USD",
+  "products": [
+    {
+      "currency": "USD",
+      "dynamic": {
+        "as_of": "synthetic-catalog-v1",
+        "freshness": "current",
+        "price": 12,
+        "stock": 20
+      },
+      "name": "Matte ceramic mug 350 ml",
+      "product_id": "prod-mug-sand",
+      "sku": "SKU-MUG-SAND",
+      "static_attributes": {
+        "category": "drinkware",
+        "color": "sand",
+        "material": "ceramic",
+        "size": "350ml",
+        "warranty_months": 12
+      }
+    },
+    {
+      "currency": "USD",
+      "dynamic": {
+        "as_of": "synthetic-catalog-v1",
+        "freshness": "current",
+        "price": 14,
+        "stock": 8
+      },
+      "name": "Blue stoneware mug 350 ml",
+      "product_id": "prod-mug-blue",
+      "sku": "SKU-MUG-BLUE",
+      "static_attributes": {
+        "category": "drinkware",
+        "color": "blue",
+        "material": "stoneware",
+        "size": "350ml",
+        "warranty_months": 12
+      }
+    },
+    {
+      "currency": "USD",
+      "dynamic": {
+        "as_of": "synthetic-catalog-v1",
+        "freshness": "current",
+        "price": 11,
+        "stock": 0
+      },
+      "name": "Gloss red mug 300 ml",
+      "product_id": "prod-mug-red",
+      "sku": "SKU-MUG-RED",
+      "static_attributes": {
+        "category": "drinkware",
+        "color": "red",
+        "material": "ceramic",
+        "size": "300ml",
+        "warranty_months": 12
+      }
+    },
+    {
+      "currency": "USD",
+      "dynamic": {
+        "as_of": "synthetic-catalog-v1",
+        "freshness": "current",
+        "price": 18,
+        "stock": 15
+      },
+      "name": "Steel water bottle 750 ml",
+      "product_id": "prod-btl-steel",
+      "sku": "SKU-BTL-STEEL",
+      "static_attributes": {
+        "category": "drinkware",
+        "color": "steel",
+        "material": "steel",
+        "size": "750ml",
+        "warranty_months": 24
+      }
+    },
+    {
+      "currency": "USD",
+      "dynamic": {
+        "as_of": "synthetic-catalog-v1",
+        "freshness": "current",
+        "price": 24,
+        "stock": 5
+      },
+      "name": "Large insulated bottle 1 L",
+      "product_id": "prod-btl-large",
+      "sku": "SKU-BTL-LARGE",
+      "static_attributes": {
+        "category": "drinkware",
+        "color": "steel",
+        "material": "steel",
+        "size": "1L",
+        "warranty_months": 24
+      }
+    },
+    {
+      "currency": "USD",
+      "dynamic": {
+        "as_of": "synthetic-catalog-v1",
+        "freshness": "current",
+        "price": 20,
+        "stock": 10
+      },
+      "name": "Navy cotton crew tee medium",
+      "product_id": "prod-tee-navy-m",
+      "sku": "SKU-TEE-NAVY-M",
+      "static_attributes": {
+        "category": "apparel",
+        "color": "navy",
+        "material": "cotton",
+        "size": "M",
+        "warranty_months": 6
+      }
+    },
+    {
+      "currency": "USD",
+      "dynamic": {
+        "as_of": "synthetic-catalog-v1",
+        "freshness": "current",
+        "price": 20,
+        "stock": 4
+      },
+      "name": "Navy cotton crew tee large",
+      "product_id": "prod-tee-navy-l",
+      "sku": "SKU-TEE-NAVY-L",
+      "static_attributes": {
+        "category": "apparel",
+        "color": "navy",
+        "material": "cotton",
+        "size": "L",
+        "warranty_months": 6
+      }
+    },
+    {
+      "currency": "USD",
+      "dynamic": {
+        "as_of": "synthetic-catalog-v1",
+        "freshness": "current",
+        "price": 19,
+        "stock": 7
+      },
+      "name": "Olive cotton crew tee small",
+      "product_id": "prod-tee-olive-s",
+      "sku": "SKU-TEE-OLIVE-S",
+      "static_attributes": {
+        "category": "apparel",
+        "color": "olive",
+        "material": "cotton",
+        "size": "S",
+        "warranty_months": 6
+      }
+    },
+    {
+      "currency": "USD",
+      "dynamic": {
+        "as_of": "synthetic-catalog-v0",
+        "freshness": "stale",
+        "price": 40,
+        "refreshed": {
+          "as_of": "synthetic-catalog-v1",
+          "freshness": "current",
+          "price": 42,
+          "stock": 6
+        },
+        "stock": 6
+      },
+      "name": "Desk lamp linen shade",
+      "product_id": "prod-lamp",
+      "sku": "SKU-LAMP",
+      "static_attributes": {
+        "category": "home",
+        "color": "natural",
+        "material": "linen",
+        "size": "standard",
+        "warranty_months": 18
+      }
+    },
+    {
+      "currency": "USD",
+      "dynamic": {
+        "as_of": "synthetic-catalog-v1",
+        "freshness": "current",
+        "price": 8,
+        "stock": 30
+      },
+      "name": "Plain paper notebook",
+      "product_id": "prod-note",
+      "sku": "SKU-NOTE",
+      "static_attributes": {
+        "category": "stationery",
+        "color": "natural",
+        "material": "paper",
+        "size": "A5",
+        "warranty_months": 0
+      }
+    },
+    {
+      "currency": "USD",
+      "dynamic": {
+        "as_of": "synthetic-catalog-v1",
+        "freshness": "current",
+        "price": 9,
+        "stock": 12
+      },
+      "name": "Cotton hand towel",
+      "product_id": "prod-towel",
+      "sku": "SKU-TOWEL",
+      "static_attributes": {
+        "category": "home",
+        "color": "sand",
+        "material": "cotton",
+        "size": "hand",
+        "warranty_months": 6
+      }
+    }
+  ],
+  "snapshot_id": "synthetic-catalog-v1"
+}
