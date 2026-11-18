@@ -18,6 +18,8 @@ jobs:
         run: pip install -r requirements-sdk.txt
       - name: Tests
         run: python -m unittest discover -s tests -v
+      - name: Regression suite
+        run: python -m shopassist.cli eval-catalog --suite regression --output reports/ci_catalog.json
       - name: Mock eval
         run: python -m shopassist.cli eval --mode mock --splits regression --output reports/ci_eval.json
       - name: Training dry run

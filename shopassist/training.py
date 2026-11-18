@@ -62,6 +62,9 @@ def run_sft(config_path: str | Path, *, execute: bool = False, corpus_dir: str |
         meta = json.loads(corpus_manifest.read_text(encoding="utf-8"))
         blocked.update(meta.get("sealed_session_ids") or [])
         blocked.update(meta.get("regression_session_ids") or [])
+    from shopassist.eval.catalog import blocked_training_session_ids, build_catalog
+
+    blocked.update(blocked_training_session_ids(build_catalog()))
     train_path = corpus / "train.jsonl"
     rows = load_split(train_path, blocked) if train_path.is_file() else []
     rows = [row for row in rows if row["role"] == config["role"]]

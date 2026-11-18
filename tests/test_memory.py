@@ -121,31 +121,46 @@ class ContextRulesTest(unittest.TestCase):
 
 class EvalCatalogTest(unittest.TestCase):
     def test_overlap_is_not_additive_and_release_executes(self):
-        from shopassist.eval.catalog import build_catalog, coverage_matrix, run_eval_catalog
+        from shopassist.eval.catalog import LEGACY_PURPOSE_FILTER, SUITES, build_catalog, coverage_matrix, run_eval_catalog
 
         cases = build_catalog()
         matrix = coverage_matrix(cases)
         self.assertGreater(matrix["membership_sum"], matrix["unique_case_count"])
         self.assertEqual(matrix["missing_capabilities"], [])
+        self.assertEqual(matrix["missing_tags"], [])
+        self.assertEqual(matrix["online_sample_count"], 0)
         self.assertIsNone(matrix["production_kpi"])
+        self.assertIsNone(matrix["online_metrics"])
+        self.assertEqual(set(SUITES), {"development", "regression", "online_sample"})
+        self.assertEqual(set(LEGACY_PURPOSE_FILTER), {"capability_acceptance", "release_regression", "robustness_challenge", "distributional_sample", "sealed_generalization", "workload_cost"})
         report = run_eval_catalog(include_development=True)
-        self.assertTrue(report["release_passed"], [item for item in report["results"] if not item["passed"]])
+        self.assertTrue(report["release_passed"], [item for item in report["results"] if item["critical"] and not item["passed"]])
+        self.assertFalse(report["production_release"])
         self.assertIsNone(report["weighted_aggregate"]["value"])
         self.assertIsNone(report["significance_test"])
+        self.assertIn("regression", report["suites"])
+        self.assertIn("development", report["suites"])
         sealed = next(item for item in cases if item["case_id"] == "sealed-notebook")
-        self.assertIn("sealed_generalization", sealed["purposes"])
+        self.assertEqual(sealed["suites"], ["regression"])
+        self.assertIn("novel_combination", sealed["tags"])
+        self.assertFalse(sealed["critical"])
+        self.assertIn("sealed_generalization", sealed["legacy_purposes"])
         self.assertEqual(sealed["split"], "sealed")
         self.assertNotIn(sealed["lineage_id"], {card["lineage_id"] for card in __import__("shopassist.cards", fromlist=["all_cards"]).all_cards() if card["split"] == "train"})
 
     def test_bad_runtime_is_caught_and_distinct_from_release(self):
         import shopassist.communication as communication
         from shopassist.cards import all_cards
-        from shopassist.eval.catalog import build_catalog
+        from shopassist.eval.catalog import apply_suite_gates, build_catalog
         from shopassist.harness import evaluate_card
 
-        release_ids = {case["case_id"] for case in build_catalog() if "release_regression" in case["purposes"]}
-        dev_ids = {case["case_id"] for case in build_catalog() if case["suite_role"] == "development_challenge"}
-        self.assertTrue(release_ids.isdisjoint(dev_ids))
+        critical_ids = {case["case_id"] for case in build_catalog() if case["critical"]}
+        demo_ids = {case["case_id"] for case in build_catalog() if case.get("synthetic_demo")}
+        self.assertTrue(critical_ids)
+        self.assertNotIn("thanks-a", critical_ids)
+        self.assertTrue(demo_ids)
+        self.assertTrue(all(case.get("synthetic_demo") for case in build_catalog() if case["case_id"] in demo_ids))
+        self.assertFalse(any("online_sample" in case["suites"] for case in build_catalog()))
         original = communication.decide_route
 
         def always_plan(features, memory):
@@ -172,11 +187,87 @@ class EvalCatalogTest(unittest.TestCase):
         finally:
             communication.decide_route = original
 
+        baseline = {
+            "catalog_version": "eval-catalog-v2",
+            "snapshot_id": "synthetic-catalog-v1",
+            "results": [
+                {"case_id": "crit", "suites": ["regression"], "critical": True, "passed": True, "unknown": False},
+                {"case_id": "issue", "suites": ["regression"], "critical": False, "passed": False, "unknown": False},
+            ],
+        }
+        candidate = [
+            {"case_id": "crit", "suites": ["regression"], "critical": True, "passed": False, "unknown": False, "latency_ms": 1, "token_usage": None},
+            {"case_id": "issue", "suites": ["regression"], "critical": False, "passed": True, "unknown": False, "latency_ms": 1, "token_usage": None},
+        ]
+        gates = apply_suite_gates(candidate, baseline, {"allowed_pass_rate_drop": 0.0, "target_issue_ids": ["issue"], "snapshot_id": "synthetic-catalog-v1"})
+        self.assertEqual(gates["status"], "fail")
+        self.assertFalse(gates["passed"])
+        self.assertFalse(gates["production_release"])
+        self.assertIn("crit", gates["critical"]["failed_case_ids"])
+
+        unknown_target = apply_suite_gates(
+            [{"case_id": "issue", "suites": ["regression"], "critical": True, "passed": False, "unknown": True, "latency_ms": None, "token_usage": None}],
+            baseline,
+            {"allowed_pass_rate_drop": 0.0, "target_issue_ids": ["missing-issue"], "snapshot_id": "synthetic-catalog-v1"},
+        )
+        self.assertEqual(unknown_target["status"], "unknown")
+        self.assertFalse(unknown_target["passed"])
+        self.assertIsNone(unknown_target["latency_cost"]["p95_latency_ms"])
+
     def test_ingest_rejects_unlabeled_samples(self):
-        from shopassist.eval.catalog import ingest_deidentified
+        from shopassist.eval.catalog import (
+            archive_online_batch,
+            blocked_training_session_ids,
+            build_catalog,
+            copy_failure_to_development,
+            ingest_deidentified,
+            promote_to_regression,
+        )
 
         empty = ingest_deidentified({"schema": "deidentified-sample-v1", "records": [], "production_kpi": None})
         self.assertEqual(empty["sample_count"], 0)
         self.assertIsNone(empty["production_kpi"])
         with self.assertRaises(ValueError):
             ingest_deidentified({"schema": "deidentified-sample-v1", "records": [{"text": "hello", "source": {"kind": "synthetic"}}], "production_kpi": None})
+        online = ingest_deidentified({"schema": "deidentified-session-v1", "records": [], "production_kpi": None, "online_metrics": None})
+        self.assertEqual(online["sample_count"], 0)
+        self.assertIsNone(online["online_metrics"])
+        archived = archive_online_batch({"schema": "deidentified-session-v1", "records": [], "batch_id": "empty"}, archived_at="2026-01-15T00:00:00Z")
+        self.assertEqual(archived["status"], "archived")
+        self.assertIsNone(archived["online_metrics"])
+        record = {
+            "case_id": "batch-1",
+            "lineage_id": "lin-online-1",
+            "session_id": "sess-online-1",
+            "session": [],
+            "tool_evidence": [],
+            "window": {"start": "2026-01-01", "end": "2026-01-02"},
+            "sampling": {"design": "stratified", "weight": None},
+            "tags": ["ca"],
+            "source": {"kind": "deidentified_sample", "deidentified": True, "refs": ["batch-1"]},
+        }
+        copied = copy_failure_to_development(record)
+        self.assertEqual(copied["suites"], ["development"])
+        self.assertFalse(copied["training_row"])
+        with self.assertRaises(ValueError):
+            promote_to_regression(copied, {"decision": "hold"}, new_version="eval-catalog-v3")
+        promoted = promote_to_regression(
+            copied,
+            {
+                "decision": "promote",
+                "reviewer": "fixture-review",
+                "reviewed_at": "2026-01-16",
+                "expected_predicates": ["route == direct_answer"],
+                "catalog_version": "eval-catalog-v3",
+                "critical": True,
+                "source_refs": ["batch-1"],
+            },
+            new_version="eval-catalog-v3",
+        )
+        self.assertIn("regression", promoted["suites"])
+        self.assertTrue(promoted["critical"])
+        self.assertFalse(promoted["training_row"])
+        blocked = blocked_training_session_ids(build_catalog() + [promoted])
+        self.assertIn(promoted["session_id"], blocked)
+        self.assertIn("sess-mem-long", blocked)
+        self.assertNotIn("sess-online-1", {case["session_id"] for case in build_catalog()})

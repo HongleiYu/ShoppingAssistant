@@ -1,0 +1,12 @@
+{
+  "catalog_version": "eval-catalog-v2",
+  "snapshot_id": "synthetic-catalog-v1",
+  "allowed_pass_rate_drop": 0.0,
+  "core_regression_min_pass_rate": null,
+  "target_issue_ids": [],
+  "latency_budget_ms": null,
+  "token_budget": null,
+  "cost_budget": null,
+  "allow_missing_baseline": false,
+  "note": "Null budgets are not a pass and are not a production percentile. Mock latency is an offline proxy."
+}

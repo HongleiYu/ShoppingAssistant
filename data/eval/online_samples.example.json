@@ -1,0 +1,10 @@
+{
+  "schema": "deidentified-session-v1",
+  "batch_id": null,
+  "window": null,
+  "sampling": null,
+  "records": [],
+  "production_kpi": null,
+  "online_metrics": null,
+  "note": "Empty on purpose. Import only deidentified sessions with tool evidence. Do not invent conversations or online statistics."
+}

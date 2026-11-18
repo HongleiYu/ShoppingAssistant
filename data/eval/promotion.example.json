@@ -1,0 +1,10 @@
+{
+  "decision": "example_only",
+  "reviewer": "",
+  "reviewed_at": "",
+  "catalog_version": "eval-catalog-v3",
+  "critical": false,
+  "expected_predicates": ["confirmed.budget == 13", "tombstone_count >= 1", "coverage_complete"],
+  "source_refs": ["mem-long-correction"],
+  "note": "Schema example for the synthetic budget-correction case. This decision does not promote anything."
+}
