@@ -14,7 +14,7 @@ from shopassist.storage.schema import MYSQL_MIGRATION, SCHEMA_VERSION
 class MysqlStore:
     kind = "mysql"
 
-    def __init__(self, host: str, port: int, user: str, password: str, database: str):
+    def __init__(self, host: str, port: int, user: str, password: str, database: str, connect_timeout: float = 3):
         try:
             import pymysql
         except ImportError as exc:
@@ -32,7 +32,7 @@ class MysqlStore:
                 database=database,
                 charset="utf8mb4",
                 autocommit=False,
-                connect_timeout=3,
+                connect_timeout=connect_timeout,
                 cursorclass=pymysql.cursors.DictCursor,
             )
         except Exception as exc:

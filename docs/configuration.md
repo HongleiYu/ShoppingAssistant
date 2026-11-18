@@ -1,0 +1,20 @@
+# Configuration and turn streaming
+
+Settings load in this order: built-in defaults, then `SHOPASSIST_CONFIG` or `config/local_shopassist.json` (legacy `config/local_model.json` still loads if the new file is absent), then environment variables, then explicit overrides passed by the caller. Unknown keys fail. `python -m shopassist.cli check-config` prints the effective settings with secrets redacted.
+
+The example file is `config/shopassist.example.json`. Copy it to `config/local_shopassist.json` to change local defaults. Leave secrets blank; put credentials only in environment variables.
+
+## Turn endings
+
+| Status | Meaning |
+| --- | --- |
+| COMPLETED | Evidence and current constraints passed an independent check. `verification.passed` is ignored. |
+| COMPLETED_NO_MATCH | A clean lookup found nothing. |
+| WAITING_USER | The task is paused. The next relevant answer resumes it. A new direct request cancels it. The session stays. |
+| FAILED | The lookup failed, including an ungrounded finish or a tool outage. This is not a no-match. |
+| STOPPED | A configured step, tool, model, time, token, or repeat budget stopped the task. |
+| ESCALATED | Conflicting evidence or a request for a person. |
+
+Mock replies are final-only and labeled `deterministic`. They are not a simulated token stream. A configured endpoint may stream the already validated reply. Deltas are shown only while they match that reply. Any other provider output is replaced by a `buffered_fallback` copy of the validated reply. Product cards are sent once, from evidence, after validation. Routing JSON and tool arguments are never streamed.
+
+`POST /api/sessions/{id}/message` is still one JSON response. `POST /api/sessions/{id}/stream` is the event stream. Reconnecting with the same `request_id` replays the stored events and does not run the tools again.

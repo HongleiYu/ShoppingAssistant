@@ -46,8 +46,8 @@ NAVY = ["prod-tee-navy-l", "prod-tee-navy-m"]
 OOS_ALTS = ["prod-btl-large", "prod-btl-steel", "prod-mug-blue", "prod-mug-sand"]
 
 
-def _card(card_id, *, scenario_id, template_id, lineage_id, split, title, summary, turns, tags, expected, faults=None):
-    return {
+def _card(card_id, *, scenario_id, template_id, lineage_id, split, title, summary, turns, tags, expected, faults=None, runtime=None):
+    card = {
         "card_id": card_id,
         "scenario_id": scenario_id,
         "template_id": template_id,
@@ -62,6 +62,9 @@ def _card(card_id, *, scenario_id, template_id, lineage_id, split, title, summar
         "tags": sorted(set(tags)),
         "expected": expected,
     }
+    if runtime:
+        card["runtime"] = runtime
+    return card
 
 
 def _one(intent, route, slots=None, variant=0):
@@ -578,6 +581,30 @@ def all_cards() -> list[dict]:
             turns=[_one("search_color", "complex_handoff", {"category": "stationery", "color": "natural", "budget": 10})],
             tags=["static_attribute", "dynamic_field"],
             expected={"routes": ["complex_handoff"], "planner_turns": [0], "task_count": 1, "exact_product_ids": ["prod-note"], "final_confirmed": {"category": "stationery", "color": "natural", "budget": 10}, "final_assumptions": {}, "escalated": False},
+        ),
+        _card(
+            "lifecycle-step-budget",
+            scenario_id="lifecycle",
+            template_id="tmpl-lifecycle-step",
+            lineage_id="lin-lifecycle-step",
+            split="regression",
+            title="Planning step budget",
+            summary="A search stops when the configured planning step budget is exhausted.",
+            turns=[_one("search_budget", "complex_handoff", {"category": "drinkware", "budget": 20})],
+            tags=["complex_recommendation"],
+            runtime={"loop": {"max_plan_steps": 1}},
+            expected={
+                "routes": ["complex_handoff"],
+                "planner_turns": [0],
+                "task_count": 1,
+                "exact_product_ids": [],
+                "terminal_statuses": ["STOPPED"],
+                "terminal_reasons": ["step_budget"],
+                "limitation_codes": ["step_budget"],
+                "final_confirmed": {"category": "drinkware", "budget": 20},
+                "final_assumptions": {},
+                "escalated": False,
+            },
         ),
     ]
     return cards

@@ -372,12 +372,20 @@ class WebAndExtensionTest(unittest.TestCase):
             self.assertEqual(counted["count"], 1)
             registry = PlanRegistry()
             registry.register("count_items", lambda task: [_step("c1", "product_search", [], {"filters": task["query"], "backend": "primary", "limit": 5})])
+            from shopassist.loop_control import Budget
+            from shopassist.planner_policy import act
+            from shopassist.settings import DEFAULTS
+
             outcome, _state, _steps = _run_planner(
                 {"task_id": "t-ext", "goal_type": "count_items", "query": {"category": "stationery", "max_price": 100, "price_op": "lt"}, "confirmed_constraints": [], "assumptions": [], "missing": []},
                 box,
                 registry,
+                decide=lambda task, state: act(task, state, registry),
+                budget=Budget(DEFAULTS["loop"]),
+                limits={"max_retries_per_step": 1, "max_replans": 1, "max_fallbacks": 1},
             )
             self.assertEqual(outcome["action"], "finish")
+            self.assertEqual(outcome["terminal"]["status"], "COMPLETED")
         finally:
             box.close()
         extra = Catalog("synthetic-catalog-extra", [{

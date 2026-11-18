@@ -1,0 +1,47 @@
+{
+  "mode": "mock",
+  "opt_in_configured_model": false,
+  "opt_in_local_weights": false,
+  "seed": 0,
+  "loop": {
+    "max_plan_steps": 8,
+    "max_tool_calls": 30,
+    "max_model_calls": 16,
+    "max_retries_per_step": 1,
+    "max_replans": 1,
+    "max_fallbacks": 1,
+    "repeat_limit": 1,
+    "wall_clock_seconds": 30,
+    "token_budget": null,
+    "missing_usage_tokens": 32,
+    "chars_per_token": 4
+  },
+  "model": {
+    "stream_final": true,
+    "ca": {"base_url": "", "model": "", "api_key": "", "api_key_env": "SHOPASSIST_CA_API_KEY", "timeout_seconds": 30},
+    "pa": {"base_url": "", "model": "", "api_key": "", "api_key_env": "SHOPASSIST_PA_API_KEY", "timeout_seconds": 30},
+    "judge": {"enabled": false, "base_url": "", "model": "", "api_key": "", "api_key_env": "SHOPASSIST_JUDGE_API_KEY"}
+  },
+  "mcp": {"tool_timeout_seconds": 2},
+  "progress": {"pending_after_ms": 200, "milestone_min_interval_ms": 150},
+  "context": {
+    "latest_messages": 10,
+    "recent_memory_days": 7,
+    "summary_min_new_messages": 4,
+    "summary_token_budget": 200,
+    "sync_catchup_messages": 8,
+    "summary_mode": "mock"
+  },
+  "store": {"kind": "local_sqlite", "sqlite_path": ":memory:"},
+  "cache": {"kind": "local_memory", "redis_url": "", "fallback": "", "socket_timeout_seconds": 2},
+  "mysql": {"host": "127.0.0.1", "port": 3306, "user": "", "password": "", "database": "shopassist", "connect_timeout_seconds": 3},
+  "ui": {"host": "127.0.0.1", "port": 8765, "max_body_bytes": 100000},
+  "paths": {
+    "corpus": "data/demo_corpus",
+    "reports": "reports",
+    "gates": "configs/gates_demo.json",
+    "release_gates": "configs/release_gates.json",
+    "training_ca": "configs/sft_ca_smoke.json",
+    "training_pa": "configs/sft_pa_smoke.json"
+  }
+}

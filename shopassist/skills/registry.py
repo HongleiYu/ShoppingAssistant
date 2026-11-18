@@ -19,6 +19,7 @@ class SkillSpec:
     handler: Callable
     input_fields: tuple[str, ...]
     output_fields: tuple[str, ...] = ("status",)
+    idempotent: bool = True
 
 
 class SkillRegistry:
@@ -47,7 +48,7 @@ class SkillExecutor:
         self.registry = registry
         self.gateway = gateway
 
-    def invoke(self, skill_id: str, arguments: dict) -> dict:
+    def invoke(self, skill_id: str, arguments: dict, timeout: float | None = None) -> dict:
         spec = self.registry.get(skill_id)
         if not isinstance(arguments, dict):
             raise SkillContractError("arguments_not_object")
@@ -56,7 +57,7 @@ class SkillExecutor:
         def call(tool: str, tool_args: dict):
             if tool not in spec.allowed_tools:
                 raise SkillContractError("tool_not_in_skill_contract:" + tool)
-            result = self.gateway.call(tool, tool_args)
+            result = self.gateway.call(tool, tool_args, timeout=timeout)
             trace.append(
                 {
                     "tool": tool,

@@ -35,12 +35,12 @@ class ToolGateway:
         self.client = client
         self.allowlist = allowlist
 
-    def call(self, tool: str, arguments: dict) -> dict:
+    def call(self, tool: str, arguments: dict, timeout: float | None = None) -> dict:
         if tool not in self.allowlist:
             raise SandboxError("tool_not_allowlisted:" + tool)
         if tool not in self.client.discovered_tools:
             raise SandboxError("mcp_tool_not_advertised:" + tool)
-        return self.client.call_tool(tool, arguments)
+        return self.client.call_tool(tool, arguments, timeout=timeout)
 
 
 class SessionSandbox:
@@ -91,10 +91,10 @@ class SessionSandbox:
         gateway = ToolGateway(self.process.client, set(TOOL_SPECS))
         self.executor = SkillExecutor(self.registry, gateway)
 
-    def invoke(self, skill_id: str, arguments: dict) -> dict:
+    def invoke(self, skill_id: str, arguments: dict, timeout: float | None = None) -> dict:
         if self.executor is None:
             raise SandboxError("sandbox_closed")
-        return self.executor.invoke(skill_id, arguments)
+        return self.executor.invoke(skill_id, arguments, timeout=timeout)
 
     def read_name_index(self) -> list[dict]:
         if self.process is None:

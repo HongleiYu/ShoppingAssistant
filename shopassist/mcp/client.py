@@ -94,13 +94,13 @@ class MCPClient:
 
         return json.loads(contents[0]["text"])
 
-    def call_tool(self, name: str, arguments: dict) -> dict:
+    def call_tool(self, name: str, arguments: dict, timeout: float | None = None) -> dict:
         if name not in TOOL_SPECS and name not in self.discovered_tools:
             raise MCPError("tool_not_allowlisted")
         if name not in self.discovered_tools:
             raise MCPError("mcp_tool_not_advertised")
         try:
-            result = self.request("tools/call", {"name": name, "arguments": arguments})
+            result = self.request("tools/call", {"name": name, "arguments": arguments}, timeout=timeout)
         except TimeoutError as exc:
             self.events.append({"method": "tools/call", "name": name, "status": "timeout"})
             raise TimeoutError("mcp_read_timeout") from exc

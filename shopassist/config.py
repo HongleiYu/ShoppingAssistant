@@ -99,39 +99,12 @@ def _merge_role(base: dict, patch: dict | None, env_url: str, env_model: str, en
 
 
 def load_config() -> dict:
-    cfg = default_config()
-    file_data = _load_local_file()
-    if file_data.get("mode"):
-        cfg["mode"] = file_data["mode"]
-    if "opt_in_configured_model" in file_data:
-        cfg["opt_in_configured_model"] = bool(file_data["opt_in_configured_model"])
-    if "opt_in_local_weights" in file_data:
-        cfg["opt_in_local_weights"] = bool(file_data["opt_in_local_weights"])
-    cfg["ca"] = _merge_role(
-        cfg["ca"],
-        file_data.get("ca") if isinstance(file_data.get("ca"), dict) else None,
-        "SHOPASSIST_CA_BASE_URL",
-        "SHOPASSIST_CA_MODEL",
-        "SHOPASSIST_CA_API_KEY",
-    )
-    cfg["pa"] = _merge_role(
-        cfg["pa"],
-        file_data.get("pa") if isinstance(file_data.get("pa"), dict) else None,
-        "SHOPASSIST_PA_BASE_URL",
-        "SHOPASSIST_PA_MODEL",
-        "SHOPASSIST_PA_API_KEY",
-    )
-    if os.environ.get("SHOPASSIST_MODE"):
-        cfg["mode"] = os.environ["SHOPASSIST_MODE"].strip()
-    opt = os.environ.get("SHOPASSIST_OPT_IN_CONFIGURED_MODEL", "")
-    if opt.lower() in {"1", "true", "yes"}:
-        cfg["opt_in_configured_model"] = True
-    local_opt = os.environ.get("SHOPASSIST_OPT_IN_LOCAL_WEIGHTS", "")
-    if local_opt.lower() in {"1", "true", "yes"}:
-        cfg["opt_in_local_weights"] = True
-    if cfg["mode"] not in MODES:
-        raise ConfigError("unknown_mode", {"mode": str(cfg["mode"])})
-    return cfg
+    from shopassist.settings import SettingsError, legacy_model_dict, load_settings
+
+    try:
+        return legacy_model_dict(load_settings())
+    except SettingsError as exc:
+        raise ConfigError(exc.code, exc.details) from exc
 
 
 def _endpoint_scope(url: str) -> str:

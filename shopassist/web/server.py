@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import threading
+import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse
@@ -23,6 +24,8 @@ class ChatApp:
     def __init__(self):
         self.sessions = {}
         self.lock = threading.Lock()
+        self._replays = {}
+        self._inflight = set()
 
     def create(self, mode: str, card_id: str | None = None) -> dict:
         clients = None
@@ -104,7 +107,55 @@ class ChatApp:
             }
         cleaned, count = scrub_object(payload)
         cleaned["redaction_count"] = count
+        cleaned["terminal"] = turn.get("terminal")
         return cleaned
+
+    def iter_stream(self, session_id: str, text: str, request_id: str | None = None):
+        from shopassist.progress import iter_turn_events
+        from shopassist.settings import load_settings
+
+        record = self._record(session_id)
+        request_id = request_id or uuid.uuid4().hex
+        key = session_id + ":" + request_id
+        with self.lock:
+            cached = self._replays.get(key)
+            if cached is not None:
+                yield from cached
+                return
+            if key in self._inflight:
+                from shopassist.progress import encode_sse
+
+                yield encode_sse(
+                    "error",
+                    {
+                        "request_id": request_id,
+                        "session_id": session_id,
+                        "sequence": 1,
+                        "type": "error",
+                        "error_code": "request_in_progress",
+                        "partial": False,
+                    },
+                )
+                return
+            self._inflight.add(key)
+        stored = []
+        try:
+            settings = record["session"].settings
+            for chunk in iter_turn_events(record["session"], text, settings or load_settings(), request_id=request_id):
+                stored.append(chunk)
+                yield chunk
+        finally:
+            with self.lock:
+                self._inflight.discard(key)
+                self._replays[key] = stored
+
+    def cancel(self, session_id: str) -> None:
+        record = self.sessions.get(session_id)
+        if record is None:
+            return
+        event = getattr(record["session"], "cancel_event", None)
+        if event is not None:
+            event.set()
 
     def run_case(self, card_id: str, session_id: str) -> dict:
         card = _card(card_id)
@@ -181,7 +232,9 @@ def make_server(host: str = "127.0.0.1", port: int = 0, app: ChatApp | None = No
         def do_POST(self):  # noqa: N802
             parsed = urlparse(self.path)
             length = int(self.headers.get("Content-Length") or 0)
-            if length > _MAX_BODY:
+            from shopassist.settings import load_settings
+
+            if length > int(load_settings()["ui"]["max_body_bytes"]):
                 return self._send(413, {"error_code": "body_too_large"})
             raw = self.rfile.read(length) if length else b"{}"
             try:
@@ -194,6 +247,9 @@ def make_server(host: str = "127.0.0.1", port: int = 0, app: ChatApp | None = No
                 if parsed.path.endswith("/message") and parsed.path.startswith("/api/sessions/"):
                     session_id = parsed.path.split("/")[3]
                     return self._send(200, application.message(session_id, str(body.get("text") or "")))
+                if parsed.path.endswith("/stream") and parsed.path.startswith("/api/sessions/"):
+                    session_id = parsed.path.split("/")[3]
+                    return self._sse(application, session_id, str(body.get("text") or ""), body.get("request_id"))
                 if parsed.path.endswith("/run") and parsed.path.startswith("/api/sessions/"):
                     session_id = parsed.path.split("/")[3]
                     return self._send(200, application.run_case(str(body.get("card_id") or ""), session_id))
@@ -207,6 +263,19 @@ def make_server(host: str = "127.0.0.1", port: int = 0, app: ChatApp | None = No
             except Exception:  # noqa: BLE001
                 return self._send(500, {"error_code": "request_failed", "mock_fallback": False})
             return self._send(404, {"error_code": "not_found"})
+
+        def _sse(self, application, session_id: str, text: str, request_id) -> None:
+            self.send_response(200)
+            self.send_header("Content-Type", "text/event-stream; charset=utf-8")
+            self.send_header("Cache-Control", "no-cache, no-store")
+            self.send_header("X-Content-Type-Options", "nosniff")
+            self.end_headers()
+            try:
+                for chunk in application.iter_stream(session_id, text, request_id):
+                    self.wfile.write(chunk.encode("utf-8"))
+                    self.wfile.flush()
+            except (BrokenPipeError, ConnectionResetError):
+                application.cancel(session_id)
 
         def _send(self, status: int, payload: dict) -> None:
             body, _ = scrub_object(payload)
