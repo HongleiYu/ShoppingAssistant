@@ -7,7 +7,7 @@ The lab has four replaceable layers and one orchestrator.
 3. **Skills** are versioned workflows. A skill may call only the tools in its contract. The constraint check skill is pure and calls no tool.
 4. **CA and PA** decide what to ask for. The session runner executes those decisions against a sandbox. It does not read gold replies.
 
-Session memory holds confirmed constraints, assumptions, missing fields, and short summaries of finished tasks. `active_task_id` is set only while a planner task is running and is cleared before the turn is stored. The planner's observation list is not the session memory.
+Session context is a profile, a seven-day recent memory, and the current session. The session input is the latest 10 messages, a summary through a watermark, and structured state. See `docs/memory.md`. `active_task_id` is set only while a planner task is running and is cleared before the turn is stored. The planner's observation list is not the session memory.
 
 A simple thanks, greeting, acknowledgement, or unrelated message is a direct answer. A policy or single-item price question uses one skill. Search, recommendation, comparison, stock recovery, and multi-step faults go to the planner.
 

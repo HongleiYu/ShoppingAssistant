@@ -168,6 +168,29 @@ def cmd_bench(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_eval_catalog(args: argparse.Namespace) -> int:
+    from shopassist.eval.catalog import render_catalog_markdown, run_eval_catalog
+
+    purposes = [item for item in args.purpose.split(",") if item] if args.purpose else None
+    report = run_eval_catalog(purposes)
+    output = Path(args.output)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    output.with_suffix(".md").write_text(render_catalog_markdown(report), encoding="utf-8")
+    _print(
+        {
+            "status": "pass" if report["release_passed"] else "fail",
+            "unique_executed": report["unique_executed"],
+            "unique_catalog_cases": report["matrix"]["unique_case_count"],
+            "membership_sum": report["matrix"]["membership_sum"],
+            "missing_capabilities": report["matrix"]["missing_capabilities"],
+            "production_kpi": None,
+            "output": str(output),
+        }
+    )
+    return 0 if report["release_passed"] else 1
+
+
 def cmd_check_config(_args: argparse.Namespace) -> int:
     _print(public_capabilities())
     return 0
@@ -216,6 +239,10 @@ def build_parser() -> argparse.ArgumentParser:
     bench = sub.add_parser("bench")
     bench.add_argument("--component", default="catalog")
     bench.set_defaults(func=cmd_bench)
+    catalog = sub.add_parser("eval-catalog")
+    catalog.add_argument("--purpose", default="")
+    catalog.add_argument("--output", default="reports/eval_catalog.json")
+    catalog.set_defaults(func=cmd_eval_catalog)
     check = sub.add_parser("check-config")
     check.set_defaults(func=cmd_check_config)
     return parser

@@ -37,10 +37,10 @@ def assert_split_integrity(cards: list[dict] | None = None) -> None:
             if previous is not None and previous != card["split"]:
                 raise SplitLeakError(f"{key} {card[key]} appears in {previous} and {card['split']}")
             bucket[card[key]] = card["split"]
-    regression_sessions = {card["session_id"] for card in cards if card["split"] == "regression"}
-    other_sessions = {card["session_id"] for card in cards if card["split"] != "regression"}
-    if regression_sessions & other_sessions:
-        raise SplitLeakError("regression session leaked into another split")
+    held_out = {card["session_id"] for card in cards if card["split"] in {"regression", "sealed"}}
+    trainable = {card["session_id"] for card in cards if card["split"] in {"train", "val", "test"}}
+    if held_out & trainable:
+        raise SplitLeakError("held-out session leaked into a trainable split")
 
 
 def coverage_report(cards: list[dict] | None = None) -> dict:
@@ -185,9 +185,9 @@ def _validate_examples(examples: list[dict]) -> None:
         for banned in ("chain_of_thought", "api_key", "hidden_thought"):
             if banned in blob:
                 raise ValueError("banned field")
-    regression_sessions = {item["provenance"]["session_id"] for item in examples if item["split"] == "regression"}
+    held_sessions = {item["provenance"]["session_id"] for item in examples if item["split"] in {"regression", "sealed"}}
     for example in examples:
-        if example["split"] != "regression" and example["provenance"]["session_id"] in regression_sessions:
+        if example["split"] in {"train", "val", "test"} and example["provenance"]["session_id"] in held_sessions:
             raise SplitLeakError(example["example_id"])
 
 
@@ -213,8 +213,10 @@ def write_corpus(root: str | Path) -> dict:
         "kb_version": KB_VERSION,
         "coverage": coverage_report(),
         "example_counts": {split: len(rows) for split, rows in sorted(by_split.items())},
-        "regression_session_ids": sorted({row["provenance"]["session_id"] for row in by_split["regression"]}),
-        "regression_lineage_ids": sorted({row["provenance"]["lineage_id"] for row in by_split["regression"]}),
+        "regression_session_ids": sorted({row["provenance"]["session_id"] for row in by_split.get("regression", [])}),
+        "regression_lineage_ids": sorted({row["provenance"]["lineage_id"] for row in by_split.get("regression", [])}),
+        "sealed_session_ids": sorted({row["provenance"]["session_id"] for row in by_split.get("sealed", [])}),
+        "sealed_lineage_ids": sorted({row["provenance"]["lineage_id"] for row in by_split.get("sealed", [])}),
         "role_counts": {
             "ca": sum(1 for row in examples if row["role"] == "ca"),
             "pa": sum(1 for row in examples if row["role"] == "pa"),

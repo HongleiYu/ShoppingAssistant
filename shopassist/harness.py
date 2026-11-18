@@ -70,6 +70,7 @@ def public_result(result: dict) -> dict:
                 "limitations": turn.get("limitations") or [],
                 "products": products,
                 "evidence": evidence,
+                "context_view": turn.get("context_view"),
             }
         )
     score = result["score"]

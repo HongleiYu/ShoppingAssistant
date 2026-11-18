@@ -1,0 +1,6 @@
+{
+  "schema": "deidentified-sample-v1",
+  "records": [],
+  "production_kpi": null,
+  "note": "Empty on purpose. Add only deidentified records through the importer. Do not invent conversations."
+}
