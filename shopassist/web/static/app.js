@@ -6,6 +6,7 @@ const banner = document.querySelector("#banner");
 const message = document.querySelector("#message");
 const send = document.querySelector("#send");
 const mode = document.querySelector("#mode");
+const modeState = document.querySelector("#mode-state");
 let sessionId = null;
 let busy = false;
 
@@ -13,6 +14,13 @@ function setBusy(value) {
   busy = value;
   send.disabled = value;
   send.textContent = value ? "Working..." : "Send";
+}
+
+function showMode(kind) {
+  if (!modeState) return;
+  modeState.textContent = kind === "configured_model"
+    ? "Server mode: configured model. Credentials stay on the server."
+    : "Server mode: mock demo. No endpoint is called.";
 }
 
 function showError(text) {
@@ -95,6 +103,7 @@ async function ensureSession() {
     throw new Error(payload.error_code || "request_failed");
   }
   sessionId = payload.session_id;
+  showMode(payload.evaluation_kind);
   return sessionId;
 }
 
@@ -115,6 +124,7 @@ async function sendText(text) {
       return;
     }
     addBubble("assistant", payload.reply_text || "");
+    showMode(payload.evaluation_kind);
     renderSide(payload);
   } catch (error) {
     showError(String(error.message || error));
@@ -128,10 +138,8 @@ async function runCase(cardId) {
   setBusy(true);
   transcript.textContent = "";
   try {
-    if (mode.value !== "mock") {
-      await ensureSession();
-    }
-    const response = await fetch("/api/sessions/demo/run", {
+    const id = await ensureSession();
+    const response = await fetch("/api/sessions/" + id + "/run", {
       method: "POST",
       headers: {"Content-Type": "application/json"},
       body: JSON.stringify({card_id: cardId}),
@@ -148,7 +156,9 @@ async function runCase(cardId) {
     });
     const mark = document.createElement("div");
     mark.className = "meta";
-    mark.textContent = payload.passed ? "Case checks passed." : "Case checks found a gap.";
+    const label = payload.evaluation_kind === "configured_model" ? "Configured model" : "Mock demo";
+    showMode(payload.evaluation_kind);
+    mark.textContent = label + ". " + (payload.passed ? "Case checks passed." : "Case checks found a gap.");
     transcript.appendChild(mark);
   } catch (error) {
     showError(String(error.message || error));
@@ -198,8 +208,12 @@ mode.addEventListener("change", () => {
   sessionId = null;
 });
 
-loadScenarios();
-const params = new URLSearchParams(window.location.search);
-if (params.get("autorun")) {
-  runCase(params.get("autorun"));
-}
+loadScenarios().then(() => {
+  const params = new URLSearchParams(window.location.search);
+  if (params.get("mode")) {
+    mode.value = params.get("mode");
+  }
+  if (params.get("autorun")) {
+    runCase(params.get("autorun"));
+  }
+});

@@ -21,6 +21,12 @@ class ChatCompletionsClient:
         self._api_key = api_key or ""
         self.timeout = timeout
         self._transport = transport or _urllib_transport
+        self.completed_calls = 0
+        self.last_usage = None
+
+    @property
+    def credential_present(self) -> bool:
+        return bool(self._api_key)
 
     def __repr__(self) -> str:
         return (
@@ -28,6 +34,7 @@ class ChatCompletionsClient:
         )
 
     def complete(self, messages: list[dict]) -> str:
+        self.completed_calls += 1
         url = self.base_url + "/chat/completions"
         headers = {"Content-Type": "application/json"}
         if self._api_key:
@@ -47,6 +54,7 @@ class ChatCompletionsClient:
             raw = raw.replace(self._api_key, "[redacted]")
         try:
             payload = json.loads(raw)
+            self.last_usage = payload.get("usage")
             return payload["choices"][0]["message"]["content"]
         except Exception as exc:  # noqa: BLE001
             raise ConfigError(

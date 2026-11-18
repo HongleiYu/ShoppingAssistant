@@ -7,6 +7,16 @@ import time
 
 from shopassist.communication import prepare_turn, task_from_decision
 from shopassist.config import ConfigError
+from shopassist.model_runtime import (
+    ModelContractError,
+    apply_model_memory,
+    ca_messages,
+    grounded_finish,
+    pa_messages,
+    parse_ca_decision,
+    parse_json_object,
+    parse_pa_decision,
+)
 from shopassist.constraints import clone_memory, empty_memory
 from shopassist.planner_policy import PlanRegistry, act, new_planner_state, resolve_arguments
 from shopassist.reply_render import (
@@ -35,23 +45,30 @@ def run_session(
     model_clients: dict | None = None,
     sandbox: SessionSandbox | None = None,
 ) -> dict:
-    if mode != "mock":
+    if mode not in {"mock", "configured_endpoint"}:
+        raise ConfigError("unknown_mode", {"mode": mode, "mock_fallback": False})
+    if mode == "configured_endpoint" and not model_clients:
         raise ConfigError(
-            "configured_mode_not_executed_here",
-            {"mode": mode, "mock_fallback": False, "hint": "Use a configured session object after readiness checks."},
+            "configured_model_not_ready",
+            {"missing": ["model_client"], "mock_fallback": False},
         )
     own = sandbox is None
     box = sandbox or SessionSandbox.start(seed=seed, faults=faults or [])
     started = time.perf_counter()
     try:
-        session = AgentSession(box, session_id=session_id, mode="mock")
+        session = AgentSession(box, session_id=session_id, mode=mode, model_clients=model_clients)
         for text in user_turns:
             session.user_message(text)
         trace = session.trace()
         trace["latency_ms"] = int((time.perf_counter() - started) * 1000)
-        trace["token_usage"] = None
-        trace["token_usage_reason"] = "unavailable_for_mock"
-        trace["evaluation_kind"] = "mock_demo"
+        if mode == "mock":
+            trace["token_usage"] = None
+            trace["token_usage_reason"] = "unavailable_for_mock"
+        else:
+            usage = _usage_from_clients(model_clients)
+            trace["token_usage"] = usage
+            trace["token_usage_reason"] = None if usage else "endpoint_did_not_report_usage"
+        trace["evaluation_kind"] = "mock_demo" if mode == "mock" else "configured_model"
         _reject_banned(trace)
         return trace
     finally:
@@ -72,6 +89,9 @@ class AgentSession:
         self.history: list[dict] = []
         self.task_counter = 0
         self.name_index = sandbox.read_name_index()
+        self._credentials_used = False
+        if model_clients:
+            self._credentials_used = any(bool(getattr(client, "credential_present", False)) for client in model_clients.values())
         if mode == "configured_endpoint" and not model_clients:
             raise ConfigError("configured_model_not_ready", {"missing": ["model_client"], "mock_fallback": False})
 
@@ -144,15 +164,18 @@ class AgentSession:
             return render_escalation("stale_unresolved")
         return render_no_match()
 
-    def _handoff(self, features, decision, text, turn) -> dict:
+    def _handoff(self, features, decision, text, turn, task: dict | None = None, decide=None) -> dict:
         self.task_counter += 1
         task_id = f"task-{self.session_id}-{self.task_counter}"
         turn["task_id"] = task_id
         turn["planner_invoked"] = True
         self.memory["active_task_id"] = task_id
-        task = task_from_decision(features, decision, self.memory, task_id, text)
+        if task is None:
+            task = task_from_decision(features, decision, self.memory, task_id, text)
+        else:
+            task["task_id"] = task_id
         try:
-            outcome, state, plans = _run_planner(task, self.sandbox, self.plan_registry)
+            outcome, state, plans = _run_planner(task, self.sandbox, self.plan_registry, decide=decide)
         finally:
             self.memory["active_task_id"] = None
         turn["plan"] = state.get("plan") or []
@@ -200,17 +223,22 @@ class AgentSession:
             turn["evidence"].append(evidence)
 
     def _model_message(self, text: str) -> dict:
-        client = self.model_clients["ca"]
-        raw = client.complete(
-            [
-                {"role": "system", "content": "Return only a JSON object for the communication contract."},
-                {"role": "user", "content": text},
-            ]
-        )
+        if "pa" not in (self.model_clients or {}) or "ca" not in (self.model_clients or {}):
+            raise ConfigError("configured_model_not_ready", {"missing": ["ca", "pa"], "mock_fallback": False})
+        raw = self.model_clients["ca"].complete(ca_messages(text, self.memory, self.name_index))
+        try:
+            decision = parse_ca_decision(parse_json_object(raw))
+        except ModelContractError:
+            raise
+        except ConfigError:
+            raise
+        memory_before = clone_memory(self.memory)
+        self.memory = apply_model_memory(self.memory, decision)
         turn = {
+            "memory_before": memory_before,
             "user_text": text,
-            "route": "direct_answer",
-            "route_reason_code": "configured_model",
+            "route": decision["route"],
+            "route_reason_code": decision["route_reason_code"],
             "planner_invoked": False,
             "task_id": None,
             "plan": [],
@@ -219,14 +247,64 @@ class AgentSession:
             "recovery": [],
             "claims": [],
             "limitations": [],
-            "reply_text": raw,
+            "evidence": [],
+            "reply_text": "",
             "escalated": False,
             "memory": clone_memory(self.memory),
-            "schema_ok": False,
+            "schema_ok": True,
             "evaluation_kind": "configured_model",
         }
+        if decision["route"] == "direct_answer":
+            rendered = {
+                "text": decision["reply_text"],
+                "claims": [],
+                "limitations": [],
+                "route": "direct_answer",
+                "route_reason_code": decision["route_reason_code"],
+            }
+        elif decision["route"] == "clarification":
+            rendered = {
+                "text": decision["reply_text"],
+                "claims": [],
+                "limitations": [],
+                "route": "clarification",
+                "route_reason_code": decision["route_reason_code"],
+            }
+        elif decision["route"] == "human_escalation":
+            rendered = render_escalation(decision["route_reason_code"])
+            turn["escalated"] = True
+        elif decision["route"] == "simple_skill":
+            rendered = self._simple_skill(decision, turn)
+        elif decision["route"] == "complex_handoff":
+            task = {
+                "goal_type": decision["goal_type"],
+                "confirmed_constraints": list(self.memory.get("confirmed_constraints") or []),
+                "assumptions": list(self.memory.get("assumptions") or []),
+                "missing": [],
+                "query": decision.get("query") or {},
+                "user_text": text,
+            }
+            rendered = self._handoff(None, decision, text, turn, task=task, decide=self._pa_decide)
+        else:
+            raise ModelContractError("model_route_rejected", {"route": decision["route"]})
+        turn["reply_text"] = rendered["text"]
+        turn["claims"] = rendered["claims"]
+        turn["limitations"] = rendered["limitations"]
+        if rendered["route"] == "human_escalation":
+            turn["route"] = "human_escalation"
+            turn["escalated"] = True
+        turn["memory"] = clone_memory(self.memory)
         self.history.append(turn)
         return turn
+
+    def _pa_decide(self, task: dict, state: dict) -> dict:
+        raw = self.model_clients["pa"].complete(pa_messages(task, state))
+        outcome = parse_pa_decision(parse_json_object(raw))
+        if outcome.get("plan"):
+            state["plan"] = outcome["plan"]
+        if outcome["action"] == "finish":
+            outcome["result"] = grounded_finish(state)
+        return outcome
 
     def trace(self) -> dict:
         tool_calls = sum(len(turn["tools"]) for turn in self.history)
@@ -241,7 +319,8 @@ class AgentSession:
             "tool_call_count": tool_calls,
             "loop_count": _loop_count(self.history),
             "mcp_events": list(self.sandbox.process.client.events) if self.sandbox.process else [],
-            "credentials_used": False,
+            "credentials_used": bool(getattr(self, "_credentials_used", False)),
+            "model_call_count": _model_calls(self.model_clients),
             "pid": self.sandbox.pid(),
             "host_pid": os.getpid(),
         }
@@ -254,12 +333,12 @@ class AgentSession:
         self.name_index = self.sandbox.read_name_index()
 
 
-def _run_planner(task, sandbox, registry: PlanRegistry):
+def _run_planner(task, sandbox, registry: PlanRegistry, decide=None):
     state = new_planner_state()
     public_steps = []
     outcome = None
     for _ in range(8):
-        outcome = act(task, state, registry)
+        outcome = decide(task, state) if decide is not None else act(task, state, registry)
         public_steps.append(
             {
                 "action": outcome["action"],
@@ -320,6 +399,23 @@ def _loop_count(history: list[dict]) -> int:
             if counts[key] == 3:
                 loops += 1
     return loops
+
+
+def _usage_from_clients(model_clients: dict | None):
+    if not model_clients:
+        return None
+    found = []
+    for client in model_clients.values():
+        usage = getattr(client, "last_usage", None)
+        if usage:
+            found.append(usage)
+    return found or None
+
+
+def _model_calls(model_clients: dict | None) -> int:
+    if not model_clients:
+        return 0
+    return sum(int(getattr(client, "completed_calls", 0) or 0) for client in model_clients.values())
 
 
 def json_key(tool, arguments) -> str:

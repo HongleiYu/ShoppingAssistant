@@ -25,37 +25,60 @@ class ChatApp:
         self.lock = threading.Lock()
 
     def create(self, mode: str, card_id: str | None = None) -> dict:
+        clients = None
         if mode == "configured_endpoint":
             cfg = load_config()
             cfg["mode"] = "configured_endpoint"
             require_configured_ready(cfg)
-            raise ConfigError(
-                "configured_chat_refuses_network",
-                {
-                    "mock_fallback": False,
-                    "hint": "The local chat stays on the mock runtime and does not call a configured endpoint.",
-                },
-            )
-        if mode != "mock":
+            from shopassist.model_client import ChatCompletionsClient
+
+            clients = {
+                "ca": ChatCompletionsClient(
+                    base_url=cfg["ca"]["base_url"],
+                    model=cfg["ca"]["model"],
+                    api_key=cfg["ca"].get("api_key") or "",
+                    timeout=float(cfg["ca"].get("timeout_seconds") or 30),
+                ),
+                "pa": ChatCompletionsClient(
+                    base_url=cfg["pa"]["base_url"],
+                    model=cfg["pa"]["model"],
+                    api_key=cfg["pa"].get("api_key") or "",
+                    timeout=float(cfg["pa"].get("timeout_seconds") or 30),
+                ),
+            }
+        elif mode != "mock":
             raise ConfigError("unknown_mode", {"mode": mode, "mock_fallback": False})
         card = _card(card_id) if card_id else None
         sandbox = SessionSandbox.start(
             seed=0 if card is None else card["seed"],
             faults=[] if card is None else card["faults"],
         )
-        session = AgentSession(sandbox, session_id=f"ui-{len(self.sessions)+1}", mode="mock")
+        session = AgentSession(
+            sandbox,
+            session_id=f"ui-{len(self.sessions)+1}",
+            mode=mode,
+            model_clients=clients,
+        )
         record = {"session": session, "card_id": card_id, "lock": threading.Lock()}
         with self.lock:
             self.sessions[session.session_id] = record
-        return {"session_id": session.session_id, "evaluation_kind": "mock_demo", "mode": "mock"}
+        kind = "configured_model" if mode == "configured_endpoint" else "mock_demo"
+        return {
+            "session_id": session.session_id,
+            "evaluation_kind": kind,
+            "mode": mode,
+            "credential_present": bool(getattr(session, "_credentials_used", False)),
+        }
 
     def message(self, session_id: str, text: str) -> dict:
         record = self._record(session_id)
         with record["lock"]:
             turn = record["session"].user_message(text)
+            kind = "configured_model" if record["session"].mode == "configured_endpoint" else "mock_demo"
             payload = {
                 "session_id": session_id,
-                "evaluation_kind": "mock_demo",
+                "evaluation_kind": kind,
+                "mode": record["session"].mode,
                 "user_text": text,
                 "reply_text": turn["reply_text"],
                 "route": turn["route"],
@@ -82,11 +105,17 @@ class ChatApp:
         cleaned["redaction_count"] = count
         return cleaned
 
-    def run_case(self, card_id: str) -> dict:
+    def run_case(self, card_id: str, session_id: str) -> dict:
         card = _card(card_id)
         if card is None:
             raise KeyError(card_id)
-        result = public_result(evaluate_card(card))
+        record = self._record(session_id)
+        session = record["session"]
+        if session.mode == "configured_endpoint" and not session.model_clients:
+            raise ConfigError("configured_model_not_ready", {"missing": ["model_client"], "mock_fallback": False})
+        result = public_result(
+            evaluate_card(card, mode=session.mode, model_clients=session.model_clients)
+        )
         cleaned, count = scrub_object(result)
         cleaned["redaction_count"] = count
         return cleaned
@@ -95,7 +124,8 @@ class ChatApp:
         record = self._record(session_id)
         with record["lock"]:
             record["session"].reset()
-        return {"session_id": session_id, "reset": True, "evaluation_kind": "mock_demo"}
+        kind = "configured_model" if record["session"].mode == "configured_endpoint" else "mock_demo"
+        return {"session_id": session_id, "reset": True, "evaluation_kind": kind, "mode": record["session"].mode}
 
     def close(self, session_id: str) -> None:
         with self.lock:
@@ -136,7 +166,7 @@ def make_server(host: str = "127.0.0.1", port: int = 0, app: ChatApp | None = No
         def do_GET(self):  # noqa: N802
             parsed = urlparse(self.path)
             if parsed.path == "/api/health":
-                return self._send(200, {"status": "ok", "mode": "mock", "evaluation_kind": "mock_demo"})
+                return self._send(200, {"status": "ok", "default_mode": "mock"})
             if parsed.path == "/api/capabilities":
                 return self._send(200, public_capabilities())
             if parsed.path == "/api/scenarios":
@@ -164,7 +194,8 @@ def make_server(host: str = "127.0.0.1", port: int = 0, app: ChatApp | None = No
                     session_id = parsed.path.split("/")[3]
                     return self._send(200, application.message(session_id, str(body.get("text") or "")))
                 if parsed.path.endswith("/run") and parsed.path.startswith("/api/sessions/"):
-                    return self._send(200, application.run_case(str(body.get("card_id") or "")))
+                    session_id = parsed.path.split("/")[3]
+                    return self._send(200, application.run_case(str(body.get("card_id") or ""), session_id))
                 if parsed.path.endswith("/reset") and parsed.path.startswith("/api/sessions/"):
                     session_id = parsed.path.split("/")[3]
                     return self._send(200, application.reset(session_id))

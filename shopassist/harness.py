@@ -7,7 +7,7 @@ from shopassist.session_runner import run_session
 from shopassist.simulator import render_turns
 
 
-def evaluate_card(card: dict, mode: str = "mock") -> dict:
+def evaluate_card(card: dict, mode: str = "mock", model_clients: dict | None = None) -> dict:
     texts = render_turns(card["turns"])
     trace = run_session(
         texts,
@@ -15,6 +15,7 @@ def evaluate_card(card: dict, mode: str = "mock") -> dict:
         faults=card["faults"],
         session_id=card["session_id"],
         mode=mode,
+        model_clients=model_clients,
     )
     score = score_trace(card["expected"], trace)
     return {

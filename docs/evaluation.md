@@ -18,7 +18,7 @@ These checks are not a full semantic judge. The optional judge hook returns `ava
 
 `python -m shopassist.cli compare` aligns cases by id. A missing baseline or candidate is `blocked_missing_*` and a non-zero exit, not a pass. Wins and regressions use pass/fail, unsupported claims, hard-constraint violations, and unnecessary planner calls. Latency is recorded and is not a gate.
 
-`evaluation_kind` is `mock_demo` for this runner. `configured_endpoint` eval does not silently run the mock. In this lab it returns a non-success status because the default command does not call an endpoint.
+`evaluation_kind` is `mock_demo` for the default runner. A configured session uses the same card runner, skills, and tool server, with CA and PA decisions taken from the configured endpoints. Invalid model output fails the request. It does not switch to the mock policy. The default CLI eval stays on mock so a normal command does not call an endpoint.
 
 An intentionally degraded report is built by `degrade_report` and is covered by a test that expects the gates to fail.
 

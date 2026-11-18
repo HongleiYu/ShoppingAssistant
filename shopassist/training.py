@@ -1,13 +1,15 @@
 """CA and PA supervised-tuning entrypoints.
 
-Dry-run validates data and writes a manifest. It does not run an optimizer.
-Optional libraries are imported only when execution is requested and a local
-model directory exists.
+Dry-run validates data and does not run an optimizer.
+`backend: local_random` runs a tiny CPU optimizer on a generated model.
+The optional pretrained-model path imports its libraries only when requested.
 """
 
 from __future__ import annotations
 
 import json
+import math
+import random
 from pathlib import Path
 
 from shopassist.corpus import load_split
@@ -41,6 +43,10 @@ def load_training_config(path: str | Path) -> dict:
         raise TrainingConfigError("larger_steps")
     if config.get("executed") is True:
         raise TrainingConfigError("config_must_not_claim_training_already_ran")
+    backend = config.get("backend") or "hf_lora"
+    if backend not in {"hf_lora", "local_random"}:
+        raise TrainingConfigError("backend")
+    config["backend"] = backend
     return config
 
 
@@ -74,8 +80,17 @@ def run_sft(config_path: str | Path, *, execute: bool = False, corpus_dir: str |
     }
     if not execute:
         return manifest
+    if config.get("backend") == "local_random":
+        trained = _run_local_random(config, rows)
+        manifest.update(trained)
+        manifest["status"] = "optimizer_steps_finished" if trained["optimizer_steps_executed"] else "not_run"
+        manifest["gpu_training_verified"] = False
+        manifest["quality_validation"] = False
+        manifest["backend"] = "local_random"
+        return manifest
     if not manifest["model_path_exists"]:
         manifest["status"] = "not_run_model_unavailable"
+        manifest["backend"] = "hf_lora"
         return manifest
     try:
         import torch  # noqa: F401
@@ -83,8 +98,10 @@ def run_sft(config_path: str | Path, *, execute: bool = False, corpus_dir: str |
         import peft  # noqa: F401
     except ImportError:
         manifest["status"] = "not_run_optional_dependency_missing"
+        manifest["backend"] = "hf_lora"
         return manifest
     trained = _run_local_optimizer(config, rows)
+    manifest["backend"] = "hf_lora"
     manifest.update(trained)
     manifest["status"] = "optimizer_steps_finished" if trained["optimizer_steps_executed"] else "not_run"
     manifest["gpu_training_verified"] = bool(trained.get("cuda_used"))
@@ -138,6 +155,139 @@ def _run_local_optimizer(config: dict, rows: list[dict]) -> dict:
         "optimizer_steps_executed": steps,
         "cuda_used": device.type == "cuda",
         "adapter_written": True,
+    }
+
+
+def _encode(text: str, vocab: int = 64) -> list[int]:
+    values = [ord(ch) % vocab for ch in text[:48]]
+    return values or [1]
+
+
+def _embed(ids: list[int], dim: int) -> list[float]:
+    vector = [0.0] * dim
+    for index, token in enumerate(ids):
+        vector[token % dim] += 1.0 / (index + 1)
+    return vector
+
+
+def _forward(features: list[float], factors, coefficients: list[float]) -> tuple[float, list[float]]:
+    hidden = []
+    for col in range(len(coefficients)):
+        hidden.append(sum(features[row] * factors[row][col] for row in range(len(features))))
+    prediction = sum(hidden[col] * coefficients[col] for col in range(len(coefficients)))
+    return prediction, hidden
+
+
+def predict_local(adapter_dir: str | Path, text: str) -> float:
+    adapter = json.loads((Path(adapter_dir) / "adapter.json").read_text(encoding="utf-8"))
+    spec = json.loads((Path(adapter["model_spec"])).read_text(encoding="utf-8"))
+    features = _embed(_encode(text, int(spec["vocab_size"])), int(spec["dim"]))
+    prediction, _hidden = _forward(features, adapter["factors"], adapter["coefficients"])
+    return prediction
+
+
+def _run_local_random(config: dict, rows: list[dict]) -> dict:
+    """Train a generated tiny low-rank model on CPU. This is not a quality run."""
+    role = config["role"]
+    seed = int(config.get("seed") or 7) + (3 if role == "pa" else 0)
+    rank = int(config["lora"]["r"])
+    dim = 8
+    vocab = 64
+    rng = random.Random(seed)
+    factors = [[rng.uniform(-0.1, 0.1) for _ in range(rank)] for _ in range(dim)]
+    coefficients = [rng.uniform(-0.1, 0.1) for _ in range(rank)]
+    velocity_factors = [[0.0 for _ in range(rank)] for _ in range(dim)]
+    velocity_coefficients = [0.0 for _ in range(rank)]
+    texts = [row["messages"][-1]["content"] for row in rows] or [role]
+    probe = texts[0]
+    features = _embed(_encode(probe, vocab), dim)
+    initial_prediction, _hidden = _forward(features, factors, coefficients)
+    steps = 0
+    learning_rate = float(config["learning_rate"])
+    momentum = 0.9
+    for step in range(int(config["max_steps"])):
+        ids = _encode(texts[step % len(texts)], vocab)
+        features = _embed(ids, dim)
+        target = (ids[-1] + 1) / vocab
+        prediction, hidden = _forward(features, factors, coefficients)
+        grad = 2.0 * (prediction - target)
+        next_coefficients = []
+        for col, value in enumerate(coefficients):
+            grad_coefficient = grad * hidden[col]
+            velocity_coefficients[col] = momentum * velocity_coefficients[col] + grad_coefficient
+            next_coefficients.append(value - learning_rate * velocity_coefficients[col])
+        next_factors = []
+        for row in range(dim):
+            next_row = []
+            for col in range(rank):
+                grad_factor = grad * coefficients[col] * features[row]
+                velocity_factors[row][col] = momentum * velocity_factors[row][col] + grad_factor
+                next_row.append(factors[row][col] - learning_rate * velocity_factors[row][col])
+            next_factors.append(next_row)
+        factors = next_factors
+        coefficients = next_coefficients
+        steps += 1
+    final_prediction, _hidden = _forward(_embed(_encode(probe, vocab), dim), factors, coefficients)
+    model_dir = Path(config["model_path"])
+    model_dir.mkdir(parents=True, exist_ok=True)
+    spec = {
+        "kind": "random_tiny",
+        "vocab_size": vocab,
+        "dim": dim,
+        "rank": rank,
+        "seed": seed,
+        "role": role,
+        "tokenizer": "generated-byte-mod",
+    }
+    spec_path = model_dir / "model_spec.json"
+    spec_path.write_text(json.dumps(spec, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    (model_dir / "tokenizer.json").write_text(
+        json.dumps({"kind": "generated-byte-mod", "vocab_size": vocab}, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    output = Path(config["adapter_output"])
+    output.mkdir(parents=True, exist_ok=True)
+    adapter = {
+        "role": role,
+        "rank": rank,
+        "factors": factors,
+        "coefficients": coefficients,
+        "steps": steps,
+        "model_spec": str(spec_path),
+        "optimizer": "momentum_sgd",
+    }
+    (output / "adapter.json").write_text(json.dumps(adapter) + "\n", encoding="utf-8")
+    (output / "trainer.json").write_text(
+        json.dumps(
+            {
+                "backend": "local_random",
+                "optimizer_steps_executed": steps,
+                "initial_prediction": initial_prediction,
+                "final_prediction": final_prediction,
+                "gpu_training_verified": False,
+                "quality_validation": False,
+                "role": role,
+            },
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    reloaded = predict_local(output, probe)
+    if not math.isfinite(reloaded):
+        raise TrainingConfigError("local_random_prediction_not_finite")
+    return {
+        "optimizer_steps_executed": steps,
+        "cuda_used": False,
+        "adapter_written": True,
+        "reloaded": abs(reloaded - final_prediction) < 1e-9,
+        "weight_delta_nonzero": abs(final_prediction - initial_prediction) > 1e-8,
+        "initial_prediction": initial_prediction,
+        "final_prediction": final_prediction,
+        "backend": "local_random",
+        "quality_validation": False,
+        "model_path_exists": True,
     }
 
 

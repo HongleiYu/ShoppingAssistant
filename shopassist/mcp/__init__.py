@@ -1,6 +1,5 @@
-"""Local MCP client and server for catalog and knowledge tools."""
+"""Local MCP client and server package.
 
-from shopassist.mcp.client import MCPClient
-from shopassist.mcp.server import serve_on_fds
-
-__all__ = ["MCPClient", "serve_on_fds"]
+Import `shopassist.mcp.client` or `shopassist.mcp.server` directly so
+`python -m shopassist.mcp.server` does not preload the server module.
+"""

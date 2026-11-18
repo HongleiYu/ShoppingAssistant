@@ -1,0 +1,2 @@
+# Test-only. The default mock runtime does not import this package.
+mcp>=1.9,<2

@@ -316,8 +316,13 @@ class WebAndExtensionTest(unittest.TestCase):
             scenarios = json.load(urllib.request.urlopen(f"http://127.0.0.1:{port}/api/scenarios"))
             self.assertGreater(len(scenarios["scenarios"]), 10)
             self.assertNotIn("expected", json.dumps(scenarios))
+            created = json.load(urllib.request.urlopen(urllib.request.Request(
+                f"http://127.0.0.1:{port}/api/sessions",
+                data=json.dumps({"mode": "mock"}).encode(),
+                headers={"Content-Type": "application/json"},
+            )))
             request = urllib.request.Request(
-                f"http://127.0.0.1:{port}/api/sessions/demo/run",
+                f"http://127.0.0.1:{port}/api/sessions/{created['session_id']}/run",
                 data=json.dumps({"card_id": "policy-returns"}).encode(),
                 headers={"Content-Type": "application/json"},
             )
@@ -326,11 +331,6 @@ class WebAndExtensionTest(unittest.TestCase):
             self.assertIn("30", payload["turns"][0]["reply_text"])
             self.assertTrue(any(tool["tool"] == "kb.get_policy" for tool in payload["turns"][0]["tools"]))
             self.assertEqual(payload["evaluation_kind"], "mock_demo")
-            created = json.load(urllib.request.urlopen(urllib.request.Request(
-                f"http://127.0.0.1:{port}/api/sessions",
-                data=json.dumps({"mode": "mock"}).encode(),
-                headers={"Content-Type": "application/json"},
-            )))
             message = json.load(urllib.request.urlopen(urllib.request.Request(
                 f"http://127.0.0.1:{port}/api/sessions/{created['session_id']}/message",
                 data=json.dumps({"text": "<script>alert(1)</script> Thanks, that is all I needed."}).encode(),

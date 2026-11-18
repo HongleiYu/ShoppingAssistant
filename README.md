@@ -15,12 +15,13 @@ This repository is a demonstration. The curated corpus is not enough to train a 
 | Skills for search, quote, compare, policy lookup, and constraint checks | Implemented; the runtime calls them through MCP |
 | Resettable per-session tool process, fault injection, replay log | Implemented |
 | Mock multi-turn regression with outcome checks | Implemented and run in this lab |
-| Supervised-tuning configs and dry-run | Implemented; optimizer steps were not run |
+| Supervised-tuning dry-run | Implemented; does not run an optimizer |
+| Tiny generated-model CPU smoke | Implemented; a few momentum steps, save, and reload for CA and PA separately |
 | Larger-model and GPU training | Config only; not run and not verified |
 | Preference or reward training | Roadmap only; calling it raises `NotImplementedError` |
 | Optional local judge | Rubric only; score stays null and is not a pass |
 | Configured model endpoint | Adapter and config schema exist; no live call was made |
-| Local chat UI | Implemented against the mock runtime |
+| Local chat UI | Mock by default. Configured mode calls the opted-in CA and PA endpoints and still uses skills and the tool server |
 
 ## Flow
 
@@ -60,11 +61,13 @@ python -m shopassist.cli compare --baseline baselines/mock_demo_v1.json --candid
 python -m shopassist.cli train --config configs/sft_ca_smoke.json
 python -m shopassist.cli train --config configs/sft_pa_smoke.json
 python -m shopassist.cli train --config configs/sft_ca_smoke.json --execute
+python -m shopassist.cli train --config configs/sft_ca_local_random.json --execute
+python -m shopassist.cli train --config configs/sft_pa_local_random.json --execute
 python -m shopassist.cli check-config
 python -m shopassist.cli bench --component catalog
 ```
 
-`--execute` returns a non-success status when the local model directory is absent. It does not fall back to the mock and then report a successful training run. The larger configs under `configs/sft_*_larger.json` raise the rank and the step count; they were not executed here.
+`--execute` on `configs/sft_*_smoke.json` returns a non-success status when that model directory is absent. It does not fall back to the mock and then report a successful training run. `configs/sft_*_local_random.json` is a separate CPU smoke: it builds a generated tiny model, runs two momentum-SGD steps, and reloads the adapter. That smoke is not a quality result. The larger configs under `configs/sft_*_larger.json` raise the rank and the step count; those files were not executed, and no GPU training was verified.
 
 A missing baseline is a blocked compare, not a pass. An unavailable judge stays null. Gates live in `configs/gates_demo.json` and are marked `demonstration_not_production`.
 
@@ -72,7 +75,9 @@ A missing baseline is a blocked compare, not a pass. An unavailable judge stays 
 
 这是一个离线的购物助手实验工程。沟通代理负责理解用户、直接回答、澄清、简单查询、转人工，或把复杂任务交给规划代理。规划代理维护带依赖的任务计划，并通过技能调用工具。简单致谢和闲聊不会进入规划代理。
 
-默认是确定性的模拟模式，不需要网络、密钥或显卡。演示语料很小，不能当作正式训练已经充分。本环境没有执行优化器训练，也没有调用配置好的模型端点。
+默认是确定性的模拟模式，不需要网络、密钥或显卡。演示语料很小，不能当作正式训练已经充分。更大模型与显卡训练没有验证。
+
+如果已经设置本说明里的环境变量和显式开关，在页面里选择“Configured model”。服务端会调用你配置的端点，浏览器拿不到密钥。配置不完整时请求会失败，不会悄悄改回模拟模式。本地随机小模型的 CPU 冒烟训练只证明优化器能走几步并重新加载，不是效果验证。
 
 ```bash
 python -m shopassist.cli quickstart
@@ -124,7 +129,15 @@ Environment variables, all optional:
 | `SHOPASSIST_PA_MODEL` | PA model name |
 | `SHOPASSIST_PA_API_KEY` | PA credential, if the endpoint requires one |
 
-The lab never ships a real credential. Local URLs may omit a credential. Non-local URLs must use the environment variable named above, not a credential embedded in the URL. Errors report missing variable names and whether a credential is present. They do not echo the value. The local chat UI does not call a configured endpoint.
+The lab never ships a real credential. Local URLs may omit a credential. Non-local URLs must use the environment variable named above, not a credential embedded in the URL. Errors report missing variable names and whether a credential is present. They do not echo the value.
+
+Configured chat, after the variables above are set and the opt-in is `yes`:
+
+```bash
+python -m shopassist.web.server --host 127.0.0.1 --port 8765
+```
+
+Open the page and choose **Configured model**. The server calls the CA endpoint, and the PA endpoint only after a complex handoff. Tool calls still go through skills and the local MCP server. The browser receives the mode name and whether a credential is present. It does not receive the credential, and the page does not store one. If the opt-in or a required setting is missing, the request fails and the server does not answer with the mock policy. Leaving the selector on **Mock demo** does not call an endpoint.
 
 ## Chat UI
 

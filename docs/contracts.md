@@ -17,7 +17,7 @@ Search filters accept `category`, `color`, `size`, `material`, `max_price`, `in_
 
 ## MCP
 
-Protocol version `2024-11-05`. Messages use `Content-Length` framing. Methods used: `initialize`, `notifications/initialized`, `tools/list`, `tools/call`, `resources/list`, `resources/read`, `ping`.
+Protocol versions accepted on initialize: `2024-11-05`, `2025-03-26`, `2025-06-18`, and `2025-11-25`. Stdio messages are newline-delimited JSON-RPC objects, the same framing the MCP client library uses. Methods used: `initialize`, `notifications/initialized`, `tools/list`, `tools/call`, `resources/list`, `resources/read`, `ping`.
 
 Built-in tools:
 
