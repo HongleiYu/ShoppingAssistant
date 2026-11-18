@@ -44,6 +44,7 @@ def iter_validated_text(session, reply_text: str):
                 yield _fallback(expected, "provider_diverged_from_validated_reply")
                 return
             accumulated += delta
+            session.budget.partial_streamed = True
             yield {
                 "type": "text_delta",
                 "source": "provider",

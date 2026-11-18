@@ -51,6 +51,13 @@ class Budget:
         self.model_calls = 0
         self.tokens_measured = 0
         self.tokens_estimated = 0
+        self.session_plan_steps = 0
+        self.session_tool_calls = 0
+        self.session_model_calls = 0
+        self.session_tokens_measured = 0
+        self.session_tokens_estimated = 0
+        self.request_deadline = self.deadline
+        self.partial_streamed = False
         self._signatures: dict[str, tuple[int, str]] = {}
         self.charge_model_calls = False
 
@@ -80,8 +87,12 @@ class Budget:
             measured = int(usage["total_tokens"])
         if measured is not None:
             self.tokens_measured += measured
+            self.session_tokens_measured += measured
         elif self.token_budget is not None:
-            self.tokens_estimated += self._estimate(text_len)
+            estimate = self._estimate(text_len)
+            self.tokens_estimated += estimate
+            self.session_tokens_estimated += estimate
+        self.session_model_calls += 1
         return self._hard_stop()
 
     def before_tool_call(self, *, uses_tools: bool) -> str | None:
@@ -93,7 +104,7 @@ class Budget:
         return None
 
     def call_timeout(self, configured: float) -> float | None:
-        remaining = self.deadline - self.clock.now()
+        remaining = self.request_deadline - self.clock.now()
         if remaining <= 0:
             return None
         return min(float(configured), remaining)
@@ -117,10 +128,28 @@ class Budget:
         signature = _signature(skill_id, arguments)
         count = self._signatures.get(signature, (0, ""))[0] + 1
         self._signatures[signature] = (count, status)
-        self.tool_calls += len(result.get("tool_trace") or [])
+        count = len(result.get("tool_trace") or [])
+        self.tool_calls += count
+        self.session_tool_calls += count
+
+    def note_plan_step(self) -> None:
+        self.plan_steps += 1
+        self.session_plan_steps += 1
+
+    def begin_request(self) -> None:
+        """Start enforcement for one user message. Session totals stay put."""
+        self.plan_steps = 0
+        self.tool_calls = 0
+        self.model_calls = 0
+        self.tokens_measured = 0
+        self.tokens_estimated = 0
+        self.request_deadline = self.clock.now() + self.wall_clock_seconds
+        self.partial_streamed = False
+        self._signatures = {}
 
     def begin_task(self) -> None:
-        self.plan_steps = 0
+        """A new planner task does not refresh the request deadline or counters."""
+        return None
 
     def _reserve_estimate(self) -> str | None:
         if self.token_budget is None:
@@ -128,6 +157,7 @@ class Budget:
         if self.tokens_used() + self.missing_usage_tokens > self.token_budget:
             return "token_budget"
         self.tokens_estimated += self.missing_usage_tokens
+        self.session_tokens_estimated += self.missing_usage_tokens
         return None
 
     def _estimate(self, text_len: int) -> int:
@@ -135,7 +165,7 @@ class Budget:
         return max(self.missing_usage_tokens, rough)
 
     def _hard_stop(self) -> str | None:
-        if self.clock.now() >= self.deadline:
+        if self.clock.now() >= self.request_deadline:
             return "wall_clock"
         if self.token_budget is not None and self.tokens_used() > self.token_budget:
             return "token_budget"

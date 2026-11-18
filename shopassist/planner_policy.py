@@ -142,47 +142,57 @@ def _limits(state: dict) -> dict:
 
 
 def _recover(task, state, last) -> dict:
+    from shopassist.recovery import choose
+
     status = last["status"]
     step_id = last["step_id"]
-    retries = state["retries"].get(step_id, 0)
     limits = _limits(state)
-    if status == "timeout":
-        if retries < limits["max_retries_per_step"]:
-            state["retries"][step_id] = retries + 1
-            return _call("retry", state["plan"], _step_by_id(state, step_id), {"strategy": "retry", "because_code": "timeout"})
-        return _fail("tool_timeout", escalate=False)
-    if status == "error":
-        if last.get("skill_id") == "product_search" and state.get("fallback_count", 0) < limits["max_fallbacks"]:
-            state["fallback_count"] = state.get("fallback_count", 0) + 1
-            state["fallback_used"] = True
-            step = _step_by_id(state, step_id)
-            arguments = dict(step.get("arguments") or {})
-            arguments["backend"] = "cached"
-            patched = dict(step)
-            patched["arguments"] = arguments
-            return _call("fallback", state["plan"], patched, {"strategy": "fallback", "because_code": "error"})
-        return _fail("tool_error", escalate=False)
-    if status == "malformed":
-        if state.get("replan_count", 0) < limits["max_replans"] and task.get("goal_type") in {"search", "recommend"}:
-            state["replan_count"] = state.get("replan_count", 0) + 1
-            state["replanned"] = True
-            plan = browse_plan(task)
-            state["plan"] = plan
-            return _call("replan", plan, plan[0], {"strategy": "replan", "because_code": "malformed"})
-        return _fail("malformed_evidence", escalate=False)
-    if status == "stale":
-        if retries < limits["max_retries_per_step"] and last.get("skill_id") == "product_quote":
-            state["retries"][step_id] = retries + 1
-            step = _step_by_id(state, step_id)
-            arguments = dict((step or {}).get("arguments") or last.get("arguments") or {})
-            arguments["fresh"] = True
-            patched = dict(step or {"step_id": step_id, "skill_id": "product_quote", "depends_on": []})
-            patched["arguments"] = arguments
-            return _call("retry", state["plan"], patched, {"strategy": "retry", "because_code": "stale"})
-        return _fail("stale_unresolved", escalate=False)
-    if status == "conflict":
+    decision = choose(
+        status=status,
+        error_code=last.get("error_code"),
+        skill_id=last.get("skill_id"),
+        goal_type=task.get("goal_type"),
+        attempt=state["retries"].get(step_id, 0),
+        fallback_count=state.get("fallback_count", 0),
+        replan_count=state.get("replan_count", 0),
+        limits=limits,
+        idempotent=True,
+    )
+    action = decision["action"]
+    if action == "retry":
+        state["retries"][step_id] = state["retries"].get(step_id, 0) + 1
+        return _call("retry", state["plan"], _step_by_id(state, step_id), {"strategy": "retry", "because_code": decision["reason"]})
+    if action == "refresh":
+        state["retries"][step_id] = state["retries"].get(step_id, 0) + 1
+        step = _step_by_id(state, step_id)
+        arguments = dict((step or {}).get("arguments") or last.get("arguments") or {})
+        arguments["fresh"] = True
+        patched = dict(step or {"step_id": step_id, "skill_id": "product_quote", "depends_on": []})
+        patched["arguments"] = arguments
+        return _call("retry", state["plan"], patched, {"strategy": "retry", "because_code": "stale"})
+    if action == "cached_fallback":
+        state["fallback_count"] = state.get("fallback_count", 0) + 1
+        state["fallback_used"] = True
+        step = _step_by_id(state, step_id)
+        arguments = dict(step.get("arguments") or {})
+        arguments["backend"] = "cached"
+        patched = dict(step)
+        patched["arguments"] = arguments
+        return _call("fallback", state["plan"], patched, {"strategy": "fallback", "because_code": "error"})
+    if action == "replan":
+        state["replan_count"] = state.get("replan_count", 0) + 1
+        state["replanned"] = True
+        plan = browse_plan(task)
+        state["plan"] = plan
+        return _call("replan", plan, plan[0], {"strategy": "replan", "because_code": "malformed"})
+    if action == "escalate":
         return _fail("conflicting_evidence", escalate=True, recovery={"strategy": "escalate_human", "because_code": "conflict"})
-    return _fail("tool_error", escalate=False)
+    if action == "accept_empty":
+        return _fail("no_match", escalate=False)
+    reason = decision["reason"]
+    if reason == "transient":
+        reason = "tool_timeout"
+    return _fail(reason if reason not in {"transient_exhausted"} else "tool_timeout", escalate=False)
 
 
 def _conclude(task, state) -> dict:

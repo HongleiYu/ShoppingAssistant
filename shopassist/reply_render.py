@@ -90,6 +90,10 @@ def render_policy(result: dict) -> dict:
 
 
 def render_items(items: list[dict], limitations: list[dict] | None = None, lead: str = "") -> dict:
+    from shopassist.evidence_gate import guard_items
+
+    items, extra = guard_items(items)
+    limitations = list(limitations or []) + extra
     limitations = list(limitations or [])
     claims = []
     parts = [lead] if lead else []

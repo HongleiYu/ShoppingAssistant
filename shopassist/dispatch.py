@@ -60,6 +60,17 @@ def decide_route(features: dict, memory: dict) -> dict:
             skill_id="policy_lookup",
             skill_args={"topic": features.get("topic") or "", "include_stale": bool(features.get("include_stale"))},
         )
+    if intent == "shipment":
+        if not features.get("tracking_id"):
+            return _decision("clarification", "missing_information", intent, True, missing=["tracking"])
+        return _decision(
+            "simple_skill",
+            "shipment_lookup",
+            intent,
+            True,
+            skill_id="shipment_lookup",
+            skill_args={"tracking_id": features["tracking_id"]},
+        )
     if intent == "quote":
         if len(features.get("product_ids") or []) != 1:
             return _decision("clarification", "missing_information", intent, True, missing=["product"])
