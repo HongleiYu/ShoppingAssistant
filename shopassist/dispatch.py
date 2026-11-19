@@ -45,6 +45,28 @@ def _value(memory: dict, features: dict, field: str):
 
 def decide_route(features: dict, memory: dict) -> dict:
     intent = features["intent"]
+    if intent == "knowledge_policy":
+        return _decision(
+            "simple_skill",
+            "knowledge_retrieve",
+            intent,
+            True,
+            skill_id="knowledge_retrieve",
+            skill_args={"query": features.get("kb_query") or "", "corpus": "policy"},
+        )
+    if intent == "knowledge_product":
+        args = {"query": features.get("kb_query") or "", "corpus": "product"}
+        budget = _value(memory, features, "budget")
+        if budget is not None:
+            args["max_price"] = budget
+        return _decision(
+            "simple_skill",
+            "knowledge_retrieve",
+            intent,
+            True,
+            skill_id="knowledge_retrieve",
+            skill_args=args,
+        )
     if intent == "ask_human":
         return _decision("human_escalation", "user_requested_person", intent, True)
     if intent in DIRECT_INTENTS:

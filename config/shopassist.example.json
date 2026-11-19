@@ -37,12 +37,28 @@
   "cache": {"kind": "local_memory", "redis_url": "", "fallback": "", "socket_timeout_seconds": 2},
   "mysql": {"host": "127.0.0.1", "port": 3306, "user": "", "password": "", "database": "shopassist", "connect_timeout_seconds": 3},
   "ui": {"host": "127.0.0.1", "port": 8765, "max_body_bytes": 100000},
-  "paths": {
+    "paths": {
     "corpus": "data/demo_corpus",
     "reports": "reports",
     "gates": "configs/gates_demo.json",
     "release_gates": "configs/release_gates.json",
     "training_ca": "configs/sft_ca_smoke.json",
     "training_pa": "configs/sft_pa_smoke.json"
+  },
+  "knowledge": {
+    "policy_count": 50,
+    "product_count": 1000,
+    "seed": 0,
+    "policy_path": "data/synthetic_kb/policies.json",
+    "product_path": "data/synthetic_kb/products.json",
+    "index_dir": "data/kb_index",
+    "encoder": "hashing_lexical_baseline",
+    "embedding_model": "",
+    "embedding_dim": 128,
+    "encoder_version": "hash-v1",
+    "top_k": 5,
+    "score_threshold": 0.2,
+    "chunk_chars": 700,
+    "index_version": "kb-index-v1"
   }
 }

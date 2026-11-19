@@ -1,0 +1,141 @@
+{
+  "brand": "澄选",
+  "title": "购物助手演示",
+  "subtitle": "合成目录上的对话。浏览器里实际跑一轮，再给出这一轮的调用链路。",
+  "banner": "这是浏览器里的确定性演示，使用合成目录。不会下单，也不会连接模型或承运商。",
+  "input_note": "解析器只识别固定的英文句式。下面的中文是说明，发送的是英文原句。",
+  "max_message_chars": 2000,
+  "composer_placeholder": "输入支持的英文句式，例如 find drinkware under 20",
+  "empty_title": "从左侧选一个场景，或自己输入原句",
+  "empty_body": "运行时加载完成后即可发送。回复、商品卡片和右侧链路都来自这一轮真正执行的结果。",
+  "differences": [
+    {
+      "en": "This page runs the mock communication agent, planner, skills, and evidence gate inside the browser. It does not call a chat-completions model.",
+      "zh": "这个页面在浏览器里运行模拟模式的沟通代理、规划代理、技能和证据门，不会调用对话模型。"
+    },
+    {
+      "en": "Catalog, policy, and shipment tools run in-process on the synthetic snapshots. There is no MCP child process and no network call to a store or carrier.",
+      "zh": "商品、政策和物流工具在页面进程内读取合成快照。没有 MCP 子进程，也不会访问商店或承运商。"
+    },
+    {
+      "en": "Session memory uses in-memory SQLite and an in-memory cache. MySQL and Redis are not used. Reset clears them.",
+      "zh": "会话记忆使用内存中的 SQLite 和内存缓存。不使用 MySQL 或 Redis。新对话会清空它们。"
+    },
+    {
+      "en": "The separate local Python server can use a configured model endpoint. This page never contacts that server and has no place to enter an API key.",
+      "zh": "另外的本地 Python 服务可以连接已配置的模型端点。这个页面不会访问那个服务，也没有填写密钥的入口。"
+    },
+    {
+      "en": "The page uses the built-in default settings. It ignores SHOPASSIST environment variables and the local settings file. The local server still applies those.",
+      "zh": "页面使用内置默认设置，忽略 SHOPASSIST 环境变量和本地设置文件。本地服务仍会读取它们。"
+    },
+    {
+      "en": "The parser matches the English sentence patterns in shopassist.parsing. The quick prompts are those sentences. A Chinese label only describes them.",
+      "zh": "解析器识别 shopassist.parsing 里的英文句式。快捷输入是这些原句。中文只是说明。"
+    },
+    {
+      "en": "Nothing here places an order or takes payment. Shipment answers describe the synthetic snapshot only.",
+      "zh": "这里不能下单，也不能付款。物流回答只描述合成快照。"
+    },
+    {
+      "en": "Knowledge search on this page uses the prebuilt hashing lexical baseline shipped with the static files. It is not a semantic embedding and it is not a live vector database or MCP process.",
+      "zh": "本页的知识检索使用随静态文件发布的哈希词面索引。它不是语义向量，也不是在线向量库或 MCP 进程。"
+    }
+  ],
+  "prompts": [
+    {
+      "id": "search",
+      "label": "按预算找杯子",
+      "detail": "检索 drinkware，预算低于 20",
+      "text": "find drinkware under 20",
+      "intent": "search"
+    },
+    {
+      "id": "budget",
+      "label": "把预算改成 13",
+      "detail": "沿用已确认的品类，只改预算",
+      "text": "change the budget to 13",
+      "intent": "change_budget"
+    },
+    {
+      "id": "compare",
+      "label": "对比两只杯子",
+      "detail": "比较目录里的两件商品",
+      "text": "compare Matte ceramic mug 350 ml and Blue stoneware mug 350 ml",
+      "intent": "compare"
+    },
+    {
+      "id": "ship-ok",
+      "label": "查已知物流",
+      "detail": "合成快照里存在的单号",
+      "text": "tracking TRK-OK",
+      "intent": "shipment"
+    },
+    {
+      "id": "ship-missing",
+      "label": "查没有的单号",
+      "detail": "快照中不存在，不等于承运商否认",
+      "text": "tracking TRK-NO-SUCH",
+      "intent": "shipment"
+    },
+    {
+      "id": "policy",
+      "label": "退货时限",
+      "detail": "查小型夹具知识库里的现行退货说明",
+      "text": "return window",
+      "intent": "policy_returns"
+    },
+    {
+      "id": "kb-policy",
+      "label": "查会员积分",
+      "detail": "前缀是英文，后面可以是中文。哈希检索，不是语义模型",
+      "text": "kb policy: 会员积分",
+      "intent": "knowledge_policy"
+    },
+    {
+      "id": "kb-product",
+      "label": "查演示商品",
+      "detail": "先检索，再核对虚构目录里的价格和库存",
+      "text": "kb product: harbor linen napkin",
+      "intent": "knowledge_product"
+    }
+  ],
+  "routes": {
+    "direct_answer": "直接回答",
+    "clarification": "需要补充",
+    "human_escalation": "转人工",
+    "simple_skill": "简单技能",
+    "complex_handoff": "交给规划代理"
+  },
+  "terminals": {
+    "COMPLETED": "完成",
+    "COMPLETED_NO_MATCH": "查完，没有匹配",
+    "WAITING_USER": "等待补充",
+    "FAILED": "失败",
+    "STOPPED": "已停止",
+    "ESCALATED": "已升级"
+  },
+  "fields": {
+    "price": "价格",
+    "stock": "库存",
+    "category": "品类",
+    "color": "颜色",
+    "size": "规格",
+    "material": "材质",
+    "warranty_months": "保修（月）",
+    "currency": "币种"
+  },
+  "limitation_notes": {
+    "logistics_not_in_snapshot": "合成快照里没有这个单号。这不是承运商证明货物不存在。",
+    "logistics_unavailable": "这次没有得到可用的物流状态。不能据此说没有记录。",
+    "logistics_not_queried": "这一轮没有查询物流。",
+    "no_match": "合成目录里没有同时满足已确认条件的商品。",
+    "dynamic_unverified": "动态价格或库存没有被当作当前值。",
+    "fact_not_in_evidence": "有说法没有对应证据，证据门已拦住。"
+  },
+  "shipment_notes": {
+    "present": "以下状态来自合成快照里核对过的字段。",
+    "empty": "快照没有这条记录。页面没有把它说成承运商的否定结论。",
+    "unavailable": "查询没有返回可用状态。"
+  }
+}

@@ -10,3 +10,6 @@ config/local_model.json
 config/local_shopassist.json
 *.local.json
 .DS_Store
+site/
+data/synthetic_kb/
+data/kb_index/

@@ -1,0 +1,30 @@
+{
+  "version": "0.27.7",
+  "base_url": "https://cdn.jsdelivr.net/pyodide/v0.27.7/full/",
+  "files": {
+    "pyodide.mjs": {
+      "sha256": "04c052c815abb0bf2981fa38c2dfa58e3120ee5288c956df2b2a15e301782c5f",
+      "size": 13931
+    },
+    "pyodide.asm.js": {
+      "sha256": "6b4c90de5b7172873f04f21884d0e9d2274e305fe32116558fe3e4fbe3618d51",
+      "size": 1255688
+    },
+    "pyodide.asm.wasm": {
+      "sha256": "a50dd1843f805a0b7c45b61037ee0d7b26dfe85efe0e18ef95a34ad24e401f5f",
+      "size": 10105545
+    },
+    "python_stdlib.zip": {
+      "sha256": "16611534726e5d8ac2bd8f926410b2dcb8d6f49aa24913463533b457a2115c16",
+      "size": 2360737
+    },
+    "pyodide-lock.json": {
+      "sha256": "9c45b916001a750f4102fc287494f3eab215909c7535c626a20db80fd6333e2c",
+      "size": 112205
+    },
+    "sqlite3-1.0.0-cp312-cp312-pyodide_2024_0_wasm32.whl": {
+      "sha256": "43061928762b03482676a1e11dcef99a003148e59fe914b6a3e41180c382cfc3",
+      "size": 563076
+    }
+  }
+}

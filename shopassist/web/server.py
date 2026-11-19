@@ -52,9 +52,16 @@ class ChatApp:
         elif mode != "mock":
             raise ConfigError("unknown_mode", {"mode": mode, "mock_fallback": False})
         card = _card(card_id) if card_id else None
+        from shopassist.settings import load_settings
+        from shopassist.vector_index import configured_index_dir
+
+        settings = load_settings()
+        index = configured_index_dir(settings)
         sandbox = SessionSandbox.start(
             seed=0 if card is None else card["seed"],
             faults=[] if card is None else card["faults"],
+            index_dir=str(index) if index else None,
+            knowledge=settings["knowledge"] if index else None,
         )
         session = AgentSession(
             sandbox,

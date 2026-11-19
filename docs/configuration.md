@@ -24,3 +24,5 @@ Mock replies are final-only and labeled `deterministic`. They are not a simulate
 `recovery.backoff_base_seconds`, `recovery.backoff_cap_seconds`, `recovery.jitter_ratio`, and `recovery.honor_retry_after` control waits after a transient timeout, 429, or 503. `loop.max_retries_per_step` caps those attempts. 401 and invalid requests are not retried. The evidence gate always runs; settings cannot turn it off.
 
 Shipment lookup is a read-only synthetic skill, `shipment_lookup`, over `logistics.lookup`. An empty snapshot says the id is absent from that snapshot. A failed lookup says the status is unavailable. Neither sentence means a carrier confirmed that no shipment exists.
+
+`knowledge.policy_count`, `knowledge.product_count`, `knowledge.seed`, `knowledge.encoder`, `knowledge.embedding_model`, `knowledge.embedding_dim`, `knowledge.top_k`, and `knowledge.score_threshold` control the fictional corpus and the offline index. The hashing encoder rejects a model id. The sentence-transformers encoder requires one and does not fall back. Paths are `knowledge.policy_path`, `knowledge.product_path`, and `knowledge.index_dir`.

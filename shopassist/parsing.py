@@ -18,6 +18,10 @@ _MAYBE = re.compile(r"maybe\s+(ceramic|stoneware|steel|cotton|linen|paper)\b")
 
 def detect_intent(text: str) -> str:
     lowered = text.strip().lower()
+    if lowered.startswith("kb policy:"):
+        return "knowledge_policy"
+    if lowered.startswith("kb product:"):
+        return "knowledge_product"
     if "a person" in lowered:
         return "ask_human"
     if lowered.startswith("thank"):
@@ -127,5 +131,15 @@ def extract_features(text: str, name_index: list[dict]) -> dict:
         "topic": topic,
         "include_stale": intent == "policy_stale",
         "tracking_id": (_TRACKING.search(text).group(1).upper() if _TRACKING.search(text) else None),
+        "kb_query": _kb_query(text),
         "text": text,
     }
+
+
+def _kb_query(text: str) -> str | None:
+    stripped = text.strip()
+    lowered = stripped.lower()
+    for prefix in ("kb policy:", "kb product:"):
+        if lowered.startswith(prefix):
+            return stripped[len(prefix) :].strip()
+    return None

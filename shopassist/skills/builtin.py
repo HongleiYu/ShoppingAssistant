@@ -177,6 +177,139 @@ def handle_shipment_lookup(arguments: dict, call) -> dict:
     }
 
 
+def handle_knowledge_retrieve(arguments: dict, call) -> dict:
+    payload = {"query": arguments.get("query") or "", "corpus": arguments.get("corpus") or ""}
+    if arguments.get("top_k") is not None:
+        payload["top_k"] = int(arguments["top_k"])
+    if arguments.get("threshold") is not None:
+        payload["threshold"] = float(arguments["threshold"])
+    raw = call("kb.retrieve", payload)
+    data = raw["data"]
+    evidence = dict(raw["evidence"])
+    hits = list(data.get("hits") or [])
+    citations = [_citation(hit) for hit in hits]
+    untrusted = [hit.get("excerpt") or "" for hit in hits if hit.get("excerpt")]
+    evidence["untrusted_text"] = list(evidence.get("untrusted_text") or []) + untrusted
+    base = {
+        "items": [],
+        "facts": [],
+        "evidence": [evidence],
+        "untrusted_text": untrusted,
+        "citations": citations,
+        "data": data,
+        "retrieval": {
+            "encoder_kind": data.get("encoder_kind"),
+            "semantic": data.get("semantic"),
+            "score_kind": data.get("score_kind"),
+            "index_version": data.get("index_version"),
+            "content_hash": data.get("content_hash"),
+            "model_id": data.get("model_id"),
+        },
+    }
+    if data.get("status") == "error":
+        base["status"] = "error"
+        return base
+    if arguments.get("corpus") == "product":
+        return _product_hits(arguments, call, hits, base)
+    facts, conflict, stale = _policy_facts(hits, evidence["evidence_id"])
+    if conflict:
+        base["status"] = "conflict"
+        base["limitations"] = [{"code": "policy_conflict"}, {"code": "untrusted_document"}]
+        return base
+    if stale:
+        base.setdefault("limitations", []).append({"code": "stale_record_ignored"})
+    base["facts"] = facts
+    base["status"] = "ok" if facts or citations else "empty"
+    if base["status"] == "empty":
+        base["data"] = dict(data)
+        base["data"]["status"] = "empty"
+    base.setdefault("limitations", []).append({"code": "untrusted_document"})
+    return base
+
+
+def _product_hits(arguments: dict, call, hits: list[dict], base: dict) -> dict:
+    items = []
+    for hit in hits:
+        product_id = hit.get("product_id")
+        if not product_id:
+            continue
+        quoted = call("kb.quote_product", {"product_id": product_id, "fresh": False})
+        base["evidence"].append(quoted["evidence"])
+        data = quoted["data"]
+        if data.get("status") != "ok":
+            continue
+        for item in data.get("items") or []:
+            copied = dict(item)
+            copied["evidence_ids"] = [quoted["evidence"]["evidence_id"]]
+            copied["retrieval_chunk_id"] = hit.get("chunk_id")
+            items.append(copied)
+    max_price = arguments.get("max_price")
+    if max_price is not None:
+        kept = []
+        for item in items:
+            if item.get("price_supported") is True and int(item.get("price")) < int(max_price):
+                kept.append(item)
+        items = kept
+        if not items:
+            base["status"] = "empty"
+            base["items"] = []
+            base["limitations"] = [{"code": "no_match"}, {"code": "untrusted_document"}]
+            return base
+    base["items"] = items
+    base["status"] = "ok" if items else "empty"
+    base["limitations"] = [{"code": "untrusted_document"}]
+    if not items:
+        base["limitations"].insert(0, {"code": "retrieval_miss"})
+    return base
+
+
+def _policy_facts(hits: list[dict], evidence_id: str) -> tuple[list[dict], bool, bool]:
+    current: dict[str, list] = {}
+    stale = False
+    for hit in hits:
+        if hit.get("freshness") != "current":
+            if hit.get("facts"):
+                stale = True
+            continue
+        for field, value in (hit.get("facts") or {}).items():
+            current.setdefault(field, [])
+            if value not in current[field]:
+                current[field].append(value)
+    if any(len(values) > 1 for values in current.values()):
+        return [], True, stale
+    facts = []
+    for field, values in current.items():
+        facts.append(
+            {
+                "field": field,
+                "value": values[0],
+                "product_id": None,
+                "doc_id": next((hit.get("doc_id") for hit in hits if (hit.get("facts") or {}).get(field) == values[0]), None),
+                "evidence_ids": [evidence_id],
+                "record_class": "static",
+                "freshness": "current",
+            }
+        )
+    return facts, False, stale
+
+
+def _citation(hit: dict) -> dict:
+    return {
+        "corpus": hit.get("corpus"),
+        "doc_id": hit.get("doc_id"),
+        "chunk_id": hit.get("chunk_id"),
+        "product_id": hit.get("product_id"),
+        "score": hit.get("score"),
+        "score_kind": hit.get("score_kind"),
+        "semantic": hit.get("semantic"),
+        "encoder_kind": hit.get("encoder_kind"),
+        "model_id": hit.get("model_id"),
+        "index_version": hit.get("index_version"),
+        "content_hash": hit.get("content_hash"),
+        "freshness": hit.get("freshness"),
+    }
+
+
 def handle_budget_attribute_validate(arguments: dict, call) -> dict:
     del call  # pure check over already retrieved items
     filters = dict(arguments.get("filters") or {})
@@ -236,6 +369,14 @@ SPECS = [
         allowed_tools=("logistics.lookup",),
         handler=handle_shipment_lookup,
         input_fields=("tracking_id",),
+    ),
+    SkillSpec(
+        skill_id="knowledge_retrieve",
+        version="1.0.0",
+        description="Retrieve fictional policy or product chunks, then check price and stock before stating them.",
+        allowed_tools=("kb.retrieve", "kb.quote_product"),
+        handler=handle_knowledge_retrieve,
+        input_fields=("query", "corpus"),
     ),
     SkillSpec(
         skill_id="budget_attribute_validate",

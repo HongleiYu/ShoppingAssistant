@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <base href="__SHOPASSIST_BASE__">
+  <title>澄选 · 购物助手演示</title>
+  <link rel="icon" href="favicon.svg">
+  <link rel="stylesheet" href="app.css">
+</head>
+<body>
+  <div class="app">
+    <header class="top">
+      <div class="brand">
+        <svg class="mark" viewBox="0 0 36 36" aria-hidden="true">
+          <rect x="3" y="8" width="30" height="22" rx="6" fill="#0e6e6b"/>
+          <path d="M10 8c0-4 16-4 16 0" fill="none" stroke="#f4efe6" stroke-width="2"/>
+          <circle cx="18" cy="19" r="4" fill="#f4efe6"/>
+        </svg>
+        <div>
+          <p class="eyebrow">Northline Demo Market</p>
+          <h1>澄选</h1>
+        </div>
+      </div>
+      <p class="banner" id="banner">这是浏览器里的确定性演示，使用合成目录。不会下单，也不会连接模型或承运商。</p>
+      <div class="top-actions">
+        <button type="button" class="ghost" id="open-nav">场景</button>
+        <button type="button" class="ghost" id="open-trace">链路</button>
+        <button type="button" id="reset">新对话</button>
+      </div>
+    </header>
+    <div class="shell">
+      <aside class="nav" id="nav">
+        <section>
+          <h2>试试这些</h2>
+          <p class="note" id="input-note"></p>
+          <div id="prompts"></div>
+        </section>
+        <section>
+          <h2>目录索引</h2>
+          <p class="note">只有名称和属性。价格要等这一轮核对之后才出现。</p>
+          <div id="catalog"></div>
+        </section>
+      </aside>
+      <section class="chat">
+        <div id="transcript" aria-live="polite"></div>
+        <form id="composer">
+          <label class="sr" for="message">消息</label>
+          <textarea id="message" rows="2" maxlength="2000" placeholder="输入支持的英文句式，例如 find drinkware under 20"></textarea>
+          <div class="composer-actions">
+            <p id="status">正在加载本地 Python 运行时。</p>
+            <button type="button" id="cancel" hidden>取消</button>
+            <button type="submit" id="send" disabled>发送</button>
+          </div>
+        </form>
+      </section>
+      <aside class="trace" id="trace">
+        <div class="trace-head">
+          <h2>本轮链路</h2>
+          <button type="button" class="ghost close-trace" id="close-trace">关闭</button>
+        </div>
+        <div id="trace-body">
+          <p class="note">发送之后，这里显示这一轮真正执行过的路由、技能、工具和证据门。</p>
+        </div>
+      </aside>
+    </div>
+  </div>
+  <script type="module" src="app.js"></script>
+</body>
+</html>
