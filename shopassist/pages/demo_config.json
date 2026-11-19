@@ -437,7 +437,6 @@
       "planner_no": "Not used",
       "terminal": "Result",
       "model": "Model",
-      "model_no": "Not called",
       "gate": "Evidence gate",
       "gate_line": "{allowed} allowed, {blocked} blocked",
       "skill": "Skill",
@@ -481,13 +480,13 @@
         "empty": "The snapshot has no record for that id.",
         "unavailable": "Tracking status is unavailable."
       },
-      "model_simulated": "Simulated adapter, no network call",
       "sim_ca_tool": "Simulated CA requested {skill}.",
       "sim_ca_handoff": "Simulated CA handed this turn to the planner.",
       "sim_pa": "Simulated PA {phase} {skill}.",
       "sim_running": "Simulated step.",
       "validated_facts": "Validated facts:",
-      "stream_label": "Simulated streaming. Pauses are for reading, not model latency."
+      "stream_label": "Simulated streaming. Pauses are for reading, not model latency.",
+      "unsupported_demo": "This code demo only supports the provided example questions. Choose one of the suggested questions or a supported scenario."
     },
     "zh": {
       "title": "演示旗舰店",
@@ -533,7 +532,6 @@
       "planner_no": "没用",
       "terminal": "结果",
       "model": "模型",
-      "model_no": "未调用",
       "gate": "证据门",
       "gate_line": "通过 {allowed}，拦住 {blocked}",
       "skill": "技能",
@@ -577,13 +575,13 @@
         "empty": "快照里没有这个单号。",
         "unavailable": "物流状态不可用。"
       },
-      "model_simulated": "模拟适配器，没有网络调用",
       "sim_ca_tool": "模拟沟通代理请求了 {skill}。",
       "sim_ca_handoff": "模拟沟通代理把这一轮交给了规划代理。",
       "sim_pa": "模拟规划代理 {phase} {skill}。",
       "sim_running": "模拟步骤。",
       "validated_facts": "已核对事实：",
-      "stream_label": "模拟逐段显示。停顿是为了阅读，不是模型延迟。"
+      "stream_label": "模拟逐段显示。停顿是为了阅读，不是模型延迟。",
+      "unsupported_demo": "当前代码演示仅支持给定的示例问题，请选择下方建议问题或支持的场景。"
     }
   },
   "stream": {

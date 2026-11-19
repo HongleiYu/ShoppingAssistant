@@ -2,7 +2,9 @@
 
 Settings load in this order: built-in defaults, then `SHOPASSIST_CONFIG` or `config/local_shopassist.json` (legacy `config/local_model.json` still loads if the new file is absent), then environment variables, then explicit overrides passed by the caller. Unknown keys fail. `python -m shopassist.cli check-config` prints the effective settings with secrets redacted.
 
-The example file is `config/shopassist.example.json`. Copy it to `config/local_shopassist.json` to change local defaults. Leave secrets blank; put credentials only in environment variables.
+The example file is `config/shopassist.example.json`. Copy it to `config/local_shopassist.json` to change local defaults. Leave secrets blank; put credentials only in environment variables. `config/local_shopassist.json` and `config/local_model.json` are gitignored. The static GitHub Pages build uses built-in defaults only and has no model endpoint and no key field.
+
+A configured communication agent and planner use the OpenAI-compatible chat-completions POST described in the README. The model returns route or planner JSON. Tool results stay on the synthetic snapshots. The evidence gate still checks claims. Invalid model JSON, a missing opt-in, and HTTP 401 fail closed and do not fall back to the mock policy. Live provider accounts were not called by the tests; the configured-path tests use a local stub.
 
 ## Turn endings
 

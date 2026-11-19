@@ -181,8 +181,8 @@ def _public_invocations(items: list[dict]) -> list[dict]:
             {
                 "agent": item.get("agent"),
                 "phase": item.get("phase"),
-                "simulated": True,
-                "network": False,
+                "simulated": bool(item.get("simulated")),
+                "network": bool(item.get("network")),
                 "adapter": item.get("adapter"),
                 "input": item.get("input") or {},
                 "output": item.get("output") or {},
@@ -311,11 +311,14 @@ class DemoApp:
             return {"ok": False, "error": "empty_message"}
         if len(text) > self.max_chars:
             return {"ok": False, "error": "message_too_long", "limit": self.max_chars}
-        request_id = "req-" + uuid.uuid4().hex[:12]
         started = time.perf_counter()
         turn = self._session.user_message(text, on_progress=on_progress)
-        duration_ms = (time.perf_counter() - started) * 1000
+        return self._finish_turn(turn, (time.perf_counter() - started) * 1000)
+
+    def _finish_turn(self, turn: dict, duration_ms: float) -> dict:
+        request_id = "req-" + uuid.uuid4().hex[:12]
         return project_turn(turn, request_id=request_id, duration_ms=duration_ms)
+
 
     def consult(self, product_id: str) -> dict:
         if not isinstance(product_id, str) or not _PRODUCT_ID.fullmatch(product_id):

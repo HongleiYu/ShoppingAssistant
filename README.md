@@ -137,6 +137,25 @@ Environment variables, all optional:
 
 The lab never ships a real credential. Local URLs may omit a credential. Non-local URLs must use the environment variable named above, not a credential embedded in the URL. Errors report missing variable names and whether a credential is present. They do not echo the value.
 
+The protocol is OpenAI-compatible `POST {base_url}/chat/completions` with `{"model","messages","temperature":0}`. The communication agent must return one JSON object: a route, and for a simple skill the skill id and arguments, or for a planner handoff a `goal_type` and `query`. The planner agent returns the next action (`plan`, `tool_call`, `finish`, and the recovery actions). Tools stay on the allowlisted synthetic catalog, policies, and shipments. The visible price, stock, and policy sentences are rendered from tool evidence and then checked by the evidence gate. The model does not get to invent those numbers. A missing opt-in, a missing endpoint or model, HTTP 401, or invalid JSON fails the request. The server does not answer with the mock policy. HTTP 429 and 503 can be retried inside `loop.max_retries_per_step`. This lab's automated tests use a local stub only. Compatibility with a live provider account was not verified.
+
+Example, with the key only in the environment of the machine that runs the server:
+
+```bash
+export SHOPASSIST_MODE=configured_endpoint
+export SHOPASSIST_OPT_IN_CONFIGURED_MODEL=yes
+export SHOPASSIST_CA_BASE_URL=https://example.invalid/v1
+export SHOPASSIST_CA_MODEL=your-ca-model
+export SHOPASSIST_CA_API_KEY=your-local-key
+export SHOPASSIST_PA_BASE_URL=https://example.invalid/v1
+export SHOPASSIST_PA_MODEL=your-pa-model
+export SHOPASSIST_PA_API_KEY=your-local-key
+python -m shopassist.cli check-config
+python -m shopassist.web.server --host 127.0.0.1 --port 8765
+```
+
+`check-config` prints whether a credential is present. It does not print the credential. GitHub Pages does not read these variables and has no key field.
+
 Configured chat, after the variables above are set and the opt-in is `yes`:
 
 ```bash
@@ -168,6 +187,8 @@ Nothing here places an order or takes payment. Shipment answers describe the syn
 Knowledge search on this page uses the prebuilt hashing lexical baseline shipped with the static files. It is not a semantic embedding and it is not a live vector database or MCP process.
 
 The page records a simulated communication-agent and planner lifecycle around the real tool calls, then reveals the validated reply in short steps. Those calls do not leave the browser, and the pauses are not model latency.
+
+Each scenario opens on one product card, the first product for that scenario. A question the demo cannot parse gets a fixed limitation sentence in the selected language. It is not treated as a missing product or a failed tool.
 
 Publish it from the `pages` workflow after the repository owner sets GitHub Pages to deploy from GitHub Actions. Until that setting exists, the workflow can build the artifact but the public URL is not live. The project URL, once Pages is enabled and a deployment succeeds, is `https://hongleiyu.github.io/ShoppingAssistant/`. This file does not claim that deployment has happened.
 

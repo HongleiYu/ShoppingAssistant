@@ -188,6 +188,11 @@ class AgentSession:
         self._record_ca_route(turn, features, decision)
         if decision["route"] == "direct_answer":
             rendered = render_direct(decision["intent"])
+        elif decision["route"] == "clarification" and decision.get("route_reason_code") == "unrecognized":
+            from shopassist.reply_render import render_demo_unsupported
+
+            rendered = render_demo_unsupported()
+            turn["terminal"] = {"status": "COMPLETED", "reason_code": "unrecognized"}
         elif decision["route"] == "clarification":
             rendered = render_clarification(decision)
         elif decision["route"] == "human_escalation":
@@ -549,6 +554,9 @@ class AgentSession:
             )
         finally:
             self.memory["active_task_id"] = None
+        return self._finish_handoff(turn, task_id, outcome, state, plans)
+
+    def _finish_handoff(self, turn, task_id, outcome, state, plans) -> dict:
         turn["planner_actions"] = _public_planner_actions(plans)
         terminal = outcome.get("terminal") or stop_terminal("step_budget")
         if terminal.get("reason_code") == "cancelled":
@@ -923,7 +931,6 @@ def _run_planner(task, sandbox, registry: PlanRegistry, decide, budget: Budget, 
                 "recorded": False,
             }
         )
-
 
 def _stopped_outcome(reason: str, partial=None) -> dict:
     return {
