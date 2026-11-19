@@ -168,3 +168,45 @@ class PagesBrowserTest(unittest.TestCase):
             page.get_by_text("That product id is not in the snapshot.").wait_for(timeout=180000)
             self.assertEqual(page.locator(".price").count(), 0)
             browser.close()
+
+
+    def test_one_card_and_unsupported_questions(self):
+        from playwright.sync_api import sync_playwright
+
+        welcomes = {
+            "consult_price": "Hello. You opened the canvas court shoes",
+            "consult_stock": "whether the canvas court shoes are in stock",
+            "search_budget": "searches drinkware under 20",
+            "compare": "compares the matte ceramic mug",
+            "returns": "shared return note",
+            "shipment_known": "tracking id TRK-OK",
+            "shipment_missing": "TRK-NO-SUCH",
+            "knowledge": "fictional membership note",
+        }
+        with sync_playwright() as playwright:
+            browser = playwright.chromium.launch()
+            page = browser.new_page(viewport={"width": 1280, "height": 800})
+            page.goto(self.url)
+            page.get_by_text("Hello. You opened the canvas court shoes from the product page.").wait_for(timeout=180000)
+            self.assertEqual(page.locator("#model-key").count(), 0)
+            self.assertEqual(page.locator("input[type='password']").count(), 0)
+            self.assertNotIn("API key", page.content())
+            for scenario, snippet in welcomes.items():
+                page.locator("#open-scenarios").click()
+                page.locator(f"article[data-scenario='{scenario}'] button").click()
+                page.locator("[data-role='welcome']", has_text=snippet).wait_for(timeout=30000)
+                self.assertEqual(page.locator(".welcome-products .product-card").count(), 1)
+                self.assertEqual(page.locator(".bubble.user").count(), 0)
+                if scenario == "compare":
+                    page.screenshot(path=str(self.shots / "pages_compare_entry.png"))
+            page.locator("#open-scenarios").click()
+            page.locator("article[data-scenario='consult_price'] button").click()
+            page.locator("#message").fill("asdf qwerty not a shopping question")
+            page.locator("#send").click()
+            page.locator(".reply", has_text="This code demo only supports the provided example questions.").wait_for(timeout=30000)
+            page.screenshot(path=str(self.shots / "pages_unsupported.png"))
+            page.locator("#lang-zh").click()
+            page.locator("#message").fill("随便聊聊今天")
+            page.locator("#send").click()
+            page.locator(".reply", has_text="当前代码演示仅支持给定的示例问题，请选择下方建议问题或支持的场景。").last.wait_for(timeout=30000)
+            browser.close()

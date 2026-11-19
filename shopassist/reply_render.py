@@ -18,6 +18,16 @@ def render_direct(intent: str) -> dict:
     return _package(text, [], [], "direct_answer", intent)
 
 
+DEMO_UNSUPPORTED_EN = (
+    "This code demo only supports the provided example questions. "
+    "Choose one of the suggested questions or a supported scenario."
+)
+
+
+def render_demo_unsupported() -> dict:
+    return _package(DEMO_UNSUPPORTED_EN, [], [], "clarification", "unrecognized")
+
+
 def render_clarification(decision: dict) -> dict:
     missing = decision.get("missing") or []
     if decision.get("contradicted"):

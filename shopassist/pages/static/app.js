@@ -60,9 +60,7 @@ async function init() {
   });
   renderTranscript();
   renderTrace();
-  worker = new Worker(new URL("worker.js", base), { type: "module" });
-  worker.onmessage = onWorker;
-  worker.postMessage({ type: "boot", indexURL: new URL("vendor/pyodide/", base).href });
+  bootWorker();
 }
 
 function chosenLocale() {
@@ -232,11 +230,10 @@ function onWorker(event) {
     const meta = inflight.get(data.id);
     inflight.delete(data.id);
     if (!meta || meta.gen !== sessionGen) return;
-    finishWait();
-    if (!data.turn || !data.turn.ok) {
+    if (!data.turn || data.turn.ok === false) {
       clearProgress();
       finishWait();
-      showNote(t()[data.turn && data.turn.error] || t().runtime_error);
+      showNote(t().runtime_error);
       return;
     }
     beginPresentation(meta, data.turn);
@@ -345,6 +342,8 @@ function turnBlock(item) {
 
 function displayReply(turn) {
   const text = t();
+  if (turn.route_reason_code === "unrecognized") return text.unsupported_demo;
+  if (turn.route === "clarification" && turn.reply_text) return turn.reply_text;
   if ((turn.cards || []).filter((card) => card.fields && card.fields.price != null).length > 1) return text.several;
   const price = (turn.cards || []).find((card) => card.fields && card.fields.price != null);
   if (price) return fill(text.price_line, { price: price.fields.price, currency: money(price.currency || "USD"), stock: price.fields.stock });
@@ -425,7 +424,7 @@ function traceNodes(turn) {
   for (const call of turn.model_invocations || []) {
     const line = document.createElement("p");
     line.className = "model-call";
-    line.textContent = `${call.agent} ${call.phase} · ${call.adapter || ""} · simulated · no network`;
+    line.textContent = `${call.agent} ${call.phase} · ${call.adapter || ""} · ${call.network ? "network" : "simulated · no network"}`;
     root.appendChild(line);
   }
   addRow(root, t().gate, fill(t().gate_line, {
@@ -481,21 +480,7 @@ function note(text) {
 function welcomeGallery() {
   const wrap = document.createElement("div");
   wrap.className = "welcome-products";
-  const ids = activeScenario && activeScenario.product_ids.length ? activeScenario.product_ids : [consult.product_id];
-  for (const productId of ids) {
-    if (consult.card && consult.card.product_id === productId) {
-      wrap.appendChild(productCard(consult.card));
-      continue;
-    }
-    const card = document.createElement("article");
-    card.className = "product-card";
-    const img = productImage(productId, productId);
-    if (img) card.appendChild(img);
-    const name = document.createElement("strong");
-    name.textContent = productId;
-    card.appendChild(name);
-    wrap.appendChild(card);
-  }
+  if (consult.card) wrap.appendChild(productCard(consult.card));
   return wrap;
 }
 
@@ -510,12 +495,13 @@ function beginPresentation(meta, turn) {
   turns.push({ user: meta.text, turn, revealed: "", pending: true });
   renderTranscript();
   renderTrace();
-  showProgress(steps.length ? `${t().stream_label} ${progressText(steps[0])}` : t().stream_label);
+  const streamLabel = t().stream_label;
+  showProgress(steps.length ? `${streamLabel} ${progressText(steps[0])}` : streamLabel);
   index = steps.length ? 1 : 0;
   const tick = () => {
     if (gen !== sessionGen || gen !== presentGen) return;
     if (index < steps.length) {
-      showProgress(`${t().stream_label} ${progressText(steps[index])}`);
+      showProgress(`${streamLabel} ${progressText(steps[index])}`);
       index += 1;
       presentTimer = window.setTimeout(tick, stepMs);
       return;
@@ -593,6 +579,12 @@ function progressText(step) {
   if (step.agent === "ca" && step.skill_id) return fill(t().sim_ca_tool, { skill: step.skill_id });
   if (step.agent === "pa") return fill(t().sim_pa, { phase: step.phase || "", skill: step.skill_id || "" }).replace(/\s+/g, " ").trim();
   return t().sim_running;
+}
+
+function bootWorker() {
+  worker = new Worker(new URL("worker.js", base), { type: "module" });
+  worker.onmessage = onWorker;
+  worker.postMessage({ type: "boot", indexURL: new URL("vendor/pyodide/", base).href });
 }
 
 function fill(template, values) {

@@ -108,7 +108,18 @@ class PagesProjectionTest(unittest.TestCase):
                 if path.suffix in {".html", ".js", ".css", ".json"} and path.name != "runtime.json"
             )
             self.assertNotIn("cdn.jsdelivr.net", blob)
-            self.assertNotIn("127.0.0.1", blob)
+            self.assertNotIn("http://127.0.0.1", blob)
+            self.assertNotIn("https://127.0.0.1", blob)
+            self.assertNotIn('type="password"', blob)
+            self.assertNotIn("enable_model", blob)
+            self.assertNotIn("apiKey", blob)
+            self.assertNotIn("js_model_fetch", blob)
+            page_js = (output / "app.js").read_text(encoding="utf-8")
+            self.assertNotIn("model-key", page_js)
+            self.assertEqual(page_js.count("localStorage.setItem"), 1)
+            self.assertIn("locale_storage_key", page_js)
+            self.assertNotIn("sessionStorage", page_js)
+            self.assertNotIn("indexedDB", page_js)
             self.assertTrue((output / ".nojekyll").is_file())
             self.assertTrue((output / "products" / "prod-shoes-court.jpg").is_file())
             demo = json.loads((output / "demo-config.json").read_text(encoding="utf-8"))
@@ -201,6 +212,26 @@ class ProductEntryTest(unittest.TestCase):
                 for line in lines:
                     self.assertNotEqual(detect_intent(line), "unknown", line)
             self.assertEqual(len(scenario["suggestions"]["en"]), len(set(scenario["suggestions"]["en"])))
+
+    def test_unrecognized_text_is_not_a_catalog_miss(self):
+        from shopassist.reply_render import DEMO_UNSUPPORTED_EN
+
+        app = DemoApp()
+        try:
+            app.consult("prod-shoes-court")
+            english = app.turn("asdf qwerty not a shopping question")
+            chinese = app.turn("随便聊聊今天")
+            self.assertEqual(english["route_reason_code"], "unrecognized")
+            self.assertEqual(chinese["route_reason_code"], "unrecognized")
+            self.assertEqual(english["reply_text"], DEMO_UNSUPPORTED_EN)
+            self.assertNotIn("48", english["reply_text"])
+            self.assertEqual(app.turn("这个商品多少钱？")["cards"][0]["fields"]["price"], 48)
+            missing = app.turn("How much is it?")
+            self.assertNotEqual(missing["route_reason_code"], "unrecognized")
+            self.assertEqual(english["terminal"]["reason_code"], "unrecognized")
+            self.assertNotIn("price", english["reply_text"].lower())
+        finally:
+            app.close()
 
 
 if __name__ == "__main__":
