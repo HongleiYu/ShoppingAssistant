@@ -32,6 +32,7 @@ from shopassist.reply_render import (
     render_direct,
     render_escalation,
     render_items,
+    render_knowledge,
     render_no_match,
     render_policy,
     render_stopped,
@@ -229,6 +230,17 @@ class AgentSession:
         turn["limitations"] = gated["limitations"]
         turn["reply_text"] = gated["reply_text"]
         turn["evidence_records"] = gated["records"]
+        turn["evidence_gate"] = {
+            "allowed_count": len(gated["claims"]),
+            "blocked": [
+                {
+                    "field": item.get("field"),
+                    "code": item.get("code"),
+                    "reason": item.get("reason"),
+                }
+                for item in gated["blocked"]
+            ],
+        }
         turn["memory"] = clone_memory(self.memory)
         self._publish_context(text, turn)
         self.history.append(turn)
@@ -357,6 +369,17 @@ class AgentSession:
                 fallback_count += 1
                 continue
             break
+        if decision["skill_id"] == "knowledge_retrieve":
+            rendered = render_knowledge(result)
+            if result.get("status") == "error":
+                turn["terminal"] = {"status": "FAILED", "reason_code": (result.get("data") or {}).get("error_code") or "tool_error"}
+            elif result.get("status") == "empty" or rendered["route_reason_code"] == "retrieval_miss":
+                turn["terminal"] = {"status": "COMPLETED_NO_MATCH", "reason_code": "retrieval_miss"}
+            elif result.get("status") == "conflict":
+                turn["terminal"] = {"status": "COMPLETED", "reason_code": "conflicting_evidence"}
+            else:
+                turn["terminal"] = {"status": "COMPLETED", "reason_code": "validated_completion"}
+            return rendered
         if decision["skill_id"] == "policy_lookup":
             if result.get("status") == "ok":
                 turn["terminal"] = {"status": "COMPLETED", "reason_code": "validated_completion"}
@@ -375,6 +398,10 @@ class AgentSession:
             turn["terminal"] = {"status": "ESCALATED", "reason_code": "conflicting_evidence"}
             return render_escalation("conflicting_evidence")
         if result["status"] == "ok" and result.get("items"):
+            if decision.get("skill_id") == "product_quote" and len(result["items"]) == 1:
+                product_id = result["items"][0].get("product_id")
+                if product_id:
+                    self.memory["consulted_product_id"] = product_id
             turn["terminal"] = {"status": "COMPLETED", "reason_code": "validated_completion"}
             return render_items(result["items"])
         if result["status"] == "stale":
@@ -532,6 +559,7 @@ class AgentSession:
             )
         finally:
             self.memory["active_task_id"] = None
+        turn["planner_actions"] = _public_planner_actions(plans)
         terminal = outcome.get("terminal") or stop_terminal("step_budget")
         if terminal.get("reason_code") == "cancelled":
             raise CancelledTurn()
@@ -880,6 +908,23 @@ def _stopped_outcome(reason: str, partial=None) -> dict:
         "recovery": None,
         "terminal": stop_terminal(reason, partial_ids=partial),
     }
+
+
+def _public_planner_actions(plans: list[dict]) -> list[dict]:
+    rows = []
+    for step in plans or []:
+        call = step.get("skill_call") or {}
+        failure = step.get("failure") if isinstance(step.get("failure"), dict) else {}
+        rows.append(
+            {
+                "action": step.get("action"),
+                "skill_id": call.get("skill_id"),
+                "step_id": call.get("step_id"),
+                "recovery": step.get("recovery"),
+                "failure_reason": failure.get("reason_code"),
+            }
+        )
+    return rows
 
 
 def _public_call(call):

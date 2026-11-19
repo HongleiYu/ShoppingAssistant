@@ -130,6 +130,64 @@ def render_stopped(reason_code: str) -> dict:
     return _package(text, [], [_limitation(reason_code or "stopped")], "direct_answer", reason_code or "stopped")
 
 
+def render_knowledge(result: dict) -> dict:
+    citations = result.get("citations") or []
+    cite = ", ".join(item.get("chunk_id") or "" for item in citations[:5] if item.get("chunk_id"))
+    limitations = list(result.get("limitations") or [])
+    retrieval = result.get("retrieval") or {}
+    encoder = retrieval.get("encoder_kind") or "unspecified"
+    if retrieval.get("semantic") is False:
+        score_note = "hashing lexical baseline, not a semantic embedding"
+    elif retrieval.get("semantic") is True:
+        score_note = "local semantic encoder"
+    else:
+        score_note = "encoder not reported"
+    status = result.get("status")
+    if status == "error":
+        code = (result.get("data") or {}).get("error_code") or "tool_error"
+        if not any(item.get("code") == code for item in limitations):
+            limitations.append(_limitation(code))
+        return _package(
+            "The knowledge index could not be queried. I will not guess a policy or a price.",
+            [],
+            limitations,
+            "direct_answer",
+            code,
+        )
+    if status == "conflict":
+        return _package(
+            f"The fictional policy chunks disagree, so I will not state a single rule. Sources: {cite}. Encoder: {encoder} ({score_note}).",
+            [],
+            limitations,
+            "direct_answer",
+            "policy_conflict",
+        )
+    if result.get("items"):
+        rendered = render_items(result["items"], limitations)
+        rendered["text"] = (
+            f"Price and stock were checked on the fictional catalog after retrieval. Sources: {cite}. "
+            f"Encoder: {encoder} ({score_note}). " + rendered["text"]
+        )
+        return rendered
+    facts = list(result.get("facts") or [])
+    if status == "empty" or not facts:
+        if not any(item.get("code") == "retrieval_miss" for item in limitations):
+            limitations.append(_limitation("retrieval_miss"))
+        return _package(
+            "No fictional knowledge chunk matched that query with a supported fact. I will not fill the gap.",
+            [],
+            limitations,
+            "direct_answer",
+            "retrieval_miss",
+        )
+    parts = [
+        f"Fictional policy note. Sources: {cite}. Encoder: {encoder} ({score_note}). The document body was not followed."
+    ]
+    for fact in facts:
+        parts.append(f"{fact['field']} is {fact['value']}.")
+    return _package(" ".join(parts), facts, limitations, "direct_answer", "knowledge_retrieve")
+
+
 def render_no_match() -> dict:
     return _package(
         "No item in the catalog snapshot satisfies the confirmed constraints.",

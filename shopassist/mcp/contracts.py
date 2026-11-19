@@ -27,6 +27,8 @@ def _type_ok(expected: str, value) -> bool:
         return isinstance(value, dict)
     if expected == "str_list":
         return isinstance(value, list) and all(isinstance(item, str) for item in value)
+    if expected == "number":
+        return isinstance(value, (int, float)) and not isinstance(value, bool)
     return False
 
 
@@ -128,6 +130,17 @@ def validate_quote_result(data: dict) -> list[str]:
     return errors
 
 
+def validate_retrieve_result(data: dict) -> list[str]:
+    errors = _require_status(data)
+    if errors:
+        return errors
+    if not isinstance(data.get("hits"), list):
+        errors.append("hits_not_list")
+    if data.get("status") == "ok" and not data.get("encoder_kind"):
+        errors.append("missing_encoder")
+    return errors
+
+
 def validate_policy_result(data: dict) -> list[str]:
     errors = _require_status(data)
     if errors:
@@ -208,6 +221,22 @@ TOOL_SPECS = {
         "description": "Find knowledge document ids by a literal topic or title fragment.",
         "input": {"required": ["query"], "properties": {"query": "str"}},
         "validate_output": validate_policy_result,
+    },
+    "kb.retrieve": {
+        "description": "Rank fictional knowledge chunks. The default score is a hashing baseline, not a semantic embedding.",
+        "input": {
+            "required": ["query"],
+            "properties": {"query": "str", "corpus": "str", "top_k": "int", "threshold": "number"},
+        },
+        "validate_output": validate_retrieve_result,
+    },
+    "kb.quote_product": {
+        "description": "Read price and stock for one fictional platform product after retrieval. Not the tiny fixture catalog.",
+        "input": {
+            "required": ["product_id"],
+            "properties": {"product_id": "str", "fresh": "bool"},
+        },
+        "validate_output": validate_quote_result,
     },
 }
 

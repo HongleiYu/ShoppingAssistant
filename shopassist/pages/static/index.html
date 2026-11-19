@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <base href="__SHOPASSIST_BASE__">
+  <title>Northline demo</title>
+  <link rel="icon" href="favicon.svg">
+  <link rel="stylesheet" href="app.css">
+</head>
+<body>
+  <div class="app">
+    <header class="top">
+      <div class="brand">
+        <svg class="mark" viewBox="0 0 36 36" aria-hidden="true">
+          <rect x="3" y="8" width="30" height="22" rx="6" fill="#0e6e6b"/>
+          <path d="M10 8c0-4 16-4 16 0" fill="none" stroke="#f4efe6" stroke-width="2"/>
+          <circle cx="18" cy="19" r="4" fill="#f4efe6"/>
+        </svg>
+        <div>
+          <p class="eyebrow" id="brand-name">Northline</p>
+          <p class="guest" id="guest">Demo guest</p>
+        </div>
+      </div>
+      <p class="banner" id="banner">Deterministic demo · synthetic catalog · no checkout</p>
+      <div class="top-actions">
+        <div class="langs" role="group" id="langs" aria-label="Language">
+          <button type="button" id="lang-en" aria-pressed="true">EN</button>
+          <button type="button" id="lang-zh" aria-pressed="false">中文</button>
+        </div>
+        <button type="button" class="ghost" id="open-scenarios">Supported scenarios</button>
+        <button type="button" class="ghost" id="open-trace" aria-expanded="false">Trace</button>
+        <button type="button" class="ghost" id="skip">Skip</button>
+        <button type="button" id="reset">New chat</button>
+      </div>
+    </header>
+    <div id="pin" class="pin" hidden></div>
+    <div id="guide-bar" class="guide-bar" hidden>
+      <strong id="guide-label">Guided demo</strong>
+      <span id="pace-note"></span>
+      <button type="button" class="ghost" id="replay">Replay</button>
+    </div>
+    <section class="chat">
+      <div id="transcript" aria-live="polite"></div>
+      <div id="handoff" class="handoff" hidden>
+        <button type="button" id="own-chat">Start your own chat</button>
+      </div>
+      <div id="chips" class="chips" aria-label="Shortcuts"></div>
+      <form id="composer">
+        <label class="sr" for="message" id="message-label">Message</label>
+        <textarea id="message" rows="2" maxlength="2000" placeholder="Ask about this item"></textarea>
+        <div class="composer-actions">
+          <p id="status">Loading the local runtime.</p>
+          <button type="button" id="cancel" hidden>Cancel</button>
+          <button type="submit" id="send" disabled>Send</button>
+        </div>
+      </form>
+    </section>
+  </div>
+  <aside id="trace" class="drawer" hidden>
+    <div class="drawer-card">
+      <div class="trace-head">
+        <h2 id="trace-title">This turn</h2>
+        <button type="button" class="ghost" id="close-trace">Close</button>
+      </div>
+      <div id="trace-body"></div>
+    </div>
+  </aside>
+  <dialog id="scenarios">
+    <div class="trace-head">
+      <h2 id="scenarios-title">Supported scenarios</h2>
+      <button type="button" class="ghost" id="close-scenarios">Close</button>
+    </div>
+    <div id="scenario-list"></div>
+  </dialog>
+  <script type="module" src="app.js"></script>
+</body>
+</html>

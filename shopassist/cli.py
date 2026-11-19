@@ -285,6 +285,97 @@ def _write_json(path: str, payload: dict) -> None:
     output.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
+def cmd_build_knowledge(args: argparse.Namespace) -> int:
+    from shopassist.kbgen import write_corpus
+    from shopassist.settings import load_settings
+
+    settings = load_settings(defaults_only=True)
+    knowledge = settings["knowledge"]
+    summary = write_corpus(
+        args.output or knowledge["policy_path"].rsplit("/", 1)[0],
+        policy_count=args.policies or knowledge["policy_count"],
+        product_count=args.products or knowledge["product_count"],
+        seed=knowledge["seed"] if args.seed is None else args.seed,
+    )
+    _print(summary)
+    return 0
+
+
+def cmd_build_index(args: argparse.Namespace) -> int:
+    from shopassist.embeddings import EmbeddingError, load_encoder
+    from shopassist.kbgen import write_corpus
+    from shopassist.settings import load_settings
+    from shopassist.vector_index import build_index
+
+    settings = load_settings(defaults_only=True)
+    knowledge = dict(settings["knowledge"])
+    if args.encoder:
+        knowledge["encoder"] = args.encoder
+    if args.model is not None:
+        knowledge["embedding_model"] = args.model
+    if args.dim:
+        knowledge["embedding_dim"] = args.dim
+    corpus = Path(args.corpus) if args.corpus else Path(knowledge["policy_path"]).parent
+    if not (corpus / "policies.json").is_file():
+        write_corpus(
+            corpus,
+            policy_count=knowledge["policy_count"],
+            product_count=knowledge["product_count"],
+            seed=knowledge["seed"],
+        )
+    policies = json.loads((corpus / "policies.json").read_text(encoding="utf-8"))["documents"]
+    products = json.loads((corpus / "products.json").read_text(encoding="utf-8"))["products"]
+    try:
+        encoder = load_encoder(knowledge)
+    except EmbeddingError as exc:
+        _print({"status": "error", "error_code": exc.code, "details": exc.details, "fallback": False})
+        return 2
+    manifest = build_index(
+        policies,
+        products,
+        encoder,
+        args.output or knowledge["index_dir"],
+        chunk_chars=knowledge["chunk_chars"],
+        index_version=knowledge["index_version"],
+    )
+    _print({"status": "ok", "manifest": manifest, "output": args.output or knowledge["index_dir"]})
+    return 0
+
+
+def cmd_retrieve(args: argparse.Namespace) -> int:
+    from shopassist.embeddings import EmbeddingError, load_encoder
+    from shopassist.settings import load_settings
+    from shopassist.vector_index import IndexMismatch, open_index
+
+    settings = load_settings(defaults_only=True)
+    knowledge = settings["knowledge"]
+    index = open_index(args.index or knowledge["index_dir"])
+    if index is None:
+        _print({"status": "error", "error_code": "index_unavailable"})
+        return 2
+    try:
+        encoder = load_encoder(
+            {
+                "encoder": index.manifest["encoder_kind"],
+                "embedding_model": index.manifest["model_id"] if index.manifest["encoder_kind"] == "sentence_transformers" else "",
+                "embedding_dim": index.manifest["dim"],
+                "encoder_version": index.manifest["encoder_version"],
+            }
+        )
+        found = index.search(
+            encoder,
+            args.query,
+            corpus=args.corpus or None,
+            top_k=args.top_k or knowledge["top_k"],
+            threshold=knowledge["score_threshold"] if args.threshold is None else args.threshold,
+        )
+    except (EmbeddingError, IndexMismatch) as exc:
+        _print({"status": "error", "error_code": exc.code, "details": getattr(exc, "details", {}), "fallback": False})
+        return 2
+    _print(found)
+    return 0 if found["status"] in {"ok", "empty"} else 2
+
+
 def cmd_check_config(_args: argparse.Namespace) -> int:
     from shopassist.settings import public_settings
 
@@ -363,6 +454,26 @@ def build_parser() -> argparse.ArgumentParser:
     promote.set_defaults(func=cmd_eval_promote)
     check = sub.add_parser("check-config")
     check.set_defaults(func=cmd_check_config)
+    knowledge = sub.add_parser("build-knowledge")
+    knowledge.add_argument("--output", default="")
+    knowledge.add_argument("--policies", type=int, default=0)
+    knowledge.add_argument("--products", type=int, default=0)
+    knowledge.add_argument("--seed", type=int, default=None)
+    knowledge.set_defaults(func=cmd_build_knowledge)
+    indexer = sub.add_parser("build-index")
+    indexer.add_argument("--corpus", default="")
+    indexer.add_argument("--output", default="")
+    indexer.add_argument("--encoder", default="")
+    indexer.add_argument("--model", default=None)
+    indexer.add_argument("--dim", type=int, default=0)
+    indexer.set_defaults(func=cmd_build_index)
+    retrieve = sub.add_parser("retrieve")
+    retrieve.add_argument("--query", required=True)
+    retrieve.add_argument("--corpus", default="")
+    retrieve.add_argument("--index", default="")
+    retrieve.add_argument("--top-k", dest="top_k", type=int, default=0)
+    retrieve.add_argument("--threshold", type=float, default=None)
+    retrieve.set_defaults(func=cmd_retrieve)
     return parser
 
 

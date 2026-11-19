@@ -20,6 +20,8 @@ MILESTONE_TEXT = {
     "policy_lookup": ("retrieving", "正在检索"),
     "product_compare": ("comparing", "正在比较"),
     "budget_attribute_validate": ("validating", "正在核对条件"),
+    "shipment_lookup": ("retrieving", "正在查询物流快照"),
+    "knowledge_retrieve": ("retrieving", "正在检索知识"),
 }
 
 PENDING_TEXT = "我正在处理中"

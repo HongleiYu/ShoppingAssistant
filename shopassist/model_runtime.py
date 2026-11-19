@@ -21,6 +21,7 @@ SKILLS = {
     "product_compare",
     "budget_attribute_validate",
     "shipment_lookup",
+    "knowledge_retrieve",
 }
 GOALS = {"search", "recommend", "compare", "oos"}
 

@@ -9,8 +9,12 @@ CATEGORIES = ("drinkware", "apparel", "home", "stationery")
 MATERIALS = ("ceramic", "stoneware", "steel", "cotton", "linen", "paper")
 
 _BUDGET = re.compile(r"(?:under|less than|my max is|budget to)\s+(\d+)")
+_BUDGET_ZH = re.compile(r"(?:预算|以内)\s*(\d+)|(\d+)\s*(?:以内|以下)")
 _TRACKING = re.compile(r"\b(TRK-[A-Z0-9-]+)\b", re.I)
 _CHANGE = re.compile(r"change the budget to\s+(\d+)")
+_CHANGE_ZH = re.compile(r"预算改成\s*(\d+)")
+_CJK = re.compile(r"[\u4e00-\u9fff]")
+_CURRENT = re.compile(r"\bthis (?:item|product)\b|这个商品|这件商品|这件", re.I)
 _SIZE = re.compile(r"size\s+([A-Za-z0-9]+)")
 _COLOR_IN = re.compile(r"(?:in|color|be)\s+(sand|blue|red|navy|olive|steel|natural|pink)\b")
 _MAYBE = re.compile(r"maybe\s+(ceramic|stoneware|steel|cotton|linen|paper)\b")
@@ -18,6 +22,13 @@ _MAYBE = re.compile(r"maybe\s+(ceramic|stoneware|steel|cotton|linen|paper)\b")
 
 def detect_intent(text: str) -> str:
     lowered = text.strip().lower()
+    if lowered.startswith("kb policy:"):
+        return "knowledge_policy"
+    if lowered.startswith("kb product:"):
+        return "knowledge_product"
+    cjk_intent = _cjk_intent(text) if _CJK.search(text) else None
+    if cjk_intent:
+        return cjk_intent
     if "a person" in lowered:
         return "ask_human"
     if lowered.startswith("thank"):
@@ -56,7 +67,9 @@ def detect_intent(text: str) -> str:
         return "policy_shipping"
     if "tracking " in lowered:
         return "shipment"
-    if "price" in lowered or "in stock" in lowered or "stock count" in lowered:
+    if "price" in lowered or "in stock" in lowered or "stock count" in lowered or "how much" in lowered:
+        return "quote"
+    if re.search(r"\bthis (?:item|product)\b", lowered):
         return "quote"
     if lowered.startswith("change the budget"):
         return "change_budget"
@@ -87,7 +100,9 @@ def extract_features(text: str, name_index: list[dict]) -> dict:
     intent = detect_intent(text)
     products = find_products(text, name_index)
     budgets = [int(value) for value in _BUDGET.findall(text.lower())]
-    change = _CHANGE.search(text.lower())
+    for groups in _BUDGET_ZH.findall(text):
+        budgets.extend(int(value) for value in groups if value)
+    change = _CHANGE.search(text.lower()) or _CHANGE_ZH.search(text)
     if change:
         budgets = [int(change.group(1))]
     colors = []
@@ -127,5 +142,34 @@ def extract_features(text: str, name_index: list[dict]) -> dict:
         "topic": topic,
         "include_stale": intent == "policy_stale",
         "tracking_id": (_TRACKING.search(text).group(1).upper() if _TRACKING.search(text) else None),
+        "kb_query": _kb_query(text),
+        "use_current_product": bool(_CURRENT.search(text)) and not products,
         "text": text,
     }
+
+
+def _cjk_intent(text: str) -> str | None:
+    if "退货" in text:
+        return "policy_returns"
+    if "保修" in text:
+        return "policy_warranty"
+    if "物流" in text and _TRACKING.search(text):
+        return "shipment"
+    if text.startswith("对比"):
+        return "compare"
+    if "多少钱" in text or "价格" in text or "有货" in text or "库存" in text:
+        return "quote"
+    if "预算改成" in text or text.startswith("把预算"):
+        return "change_budget"
+    if text.startswith("找"):
+        return "search"
+    return None
+
+
+def _kb_query(text: str) -> str | None:
+    stripped = text.strip()
+    lowered = stripped.lower()
+    for prefix in ("kb policy:", "kb product:"):
+        if lowered.startswith(prefix):
+            return stripped[len(prefix) :].strip()
+    return None

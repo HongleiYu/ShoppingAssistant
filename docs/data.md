@@ -24,3 +24,5 @@ CA and PA examples are different records. A direct answer does not create a PA e
 Labels are the observable route, plan, claims, limitations, and recovery from a reference run in the sandbox. They are not a hidden chain of thought. Evaluation does not score a candidate by pasting these labels back in as the model's output. The regression runner starts a fresh sandbox and scores the new trace against the card's `expected` block.
 
 `expected` lists routes, product ids, facts, limitation codes, and recovery strategies. It is not sent to the chat UI.
+
+The fictional platform corpus under `data/synthetic_kb` is not a train, validation, or regression split. Its documents set `not_for_training`. Generating it does not add rows to the training export.

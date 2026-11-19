@@ -57,6 +57,21 @@ def _fault_payload(kind: str, snapshot_id: str, kb_version: str, tool_name: str)
     return {**base, "status": "error", "error_code": "unknown_fault", "items": []}
 
 
+def _encoder_mismatch(declared, manifest: dict) -> list[str]:
+    if not declared:
+        return []
+    bad = []
+    if declared.get("encoder") != manifest.get("encoder_kind"):
+        bad.append("encoder_kind")
+    if int(declared.get("embedding_dim") or 0) != int(manifest.get("dim") or 0):
+        bad.append("dim")
+    if str(declared.get("encoder_version") or "") != str(manifest.get("encoder_version") or ""):
+        bad.append("encoder_version")
+    if manifest.get("encoder_kind") == "sentence_transformers" and declared.get("embedding_model") != manifest.get("model_id"):
+        bad.append("model_id")
+    return bad
+
+
 class ToolServer:
     def __init__(self, catalog, kb, profile: dict, workspace: Path, extra_tools: dict | None = None):
         self.catalog = catalog
@@ -67,6 +82,19 @@ class ToolServer:
         self.occurrences: dict[str, int] = {}
         self.call_count = 0
         self.max_calls = int(profile.get("max_calls") or 30)
+        self.kb_index = None
+        self.kb_index_error = None
+        self.kb_encoder = profile.get("kb_encoder") or None
+        raw_index = profile.get("kb_index") or ""
+        if raw_index:
+            from shopassist.vector_index import IndexMismatch, open_index
+
+            try:
+                self.kb_index = open_index(raw_index)
+                if self.kb_index is None:
+                    self.kb_index_error = "index_unavailable"
+            except IndexMismatch as exc:
+                self.kb_index_error = exc.code
         self.workspace.mkdir(parents=True, exist_ok=True)
         self.replay_path = self.workspace / "replay.jsonl"
         header = {
@@ -110,6 +138,10 @@ class ToolServer:
             return self.kb.get_policy(arguments["topic"], include_stale=bool(arguments.get("include_stale", False)))
         if tool_name == "kb.get_document":
             return self.kb.get_document(arguments["doc_id"])
+        if tool_name == "kb.retrieve":
+            return self._retrieve(arguments)
+        if tool_name == "kb.quote_product":
+            return self._quote_synthetic(arguments)
         if tool_name == "kb.search":
             result = self.kb.search(arguments["query"])
             # Search hits are pointers, not full bodies, but still match the document list schema.
@@ -122,6 +154,86 @@ class ToolServer:
         if tool_name in self.extra_tools:
             return self.extra_tools[tool_name]["handler"](arguments)
         raise KeyError(tool_name)
+
+    def _retrieve(self, arguments: dict) -> dict:
+        if self.kb_index is None:
+            return {
+                "status": "error",
+                "error_code": self.kb_index_error or "index_unavailable",
+                "hits": [],
+                "kb_version": "none",
+                "encoder_kind": None,
+                "semantic": False,
+            }
+        mismatch = _encoder_mismatch(self.kb_encoder, self.kb_index.manifest)
+        if mismatch:
+            return {
+                "status": "error",
+                "error_code": "index_mismatch",
+                "hits": [],
+                "kb_version": self.kb_index.manifest.get("index_version"),
+                "encoder_kind": self.kb_index.manifest.get("encoder_kind"),
+                "semantic": self.kb_index.manifest.get("semantic"),
+                "mismatch": mismatch,
+            }
+        from shopassist.embeddings import EmbeddingError, load_encoder
+
+        manifest = self.kb_index.manifest
+        spec = {
+            "encoder": manifest["encoder_kind"],
+            "embedding_model": manifest["model_id"] if manifest["encoder_kind"] == "sentence_transformers" else "",
+            "embedding_dim": manifest["dim"],
+            "encoder_version": manifest["encoder_version"],
+        }
+        try:
+            encoder = load_encoder(spec)
+        except EmbeddingError as exc:
+            return {
+                "status": "error",
+                "error_code": exc.code,
+                "hits": [],
+                "kb_version": manifest.get("index_version"),
+                "encoder_kind": manifest.get("encoder_kind"),
+                "semantic": False,
+                "fallback": False,
+            }
+        corpus = arguments.get("corpus") or None
+        if corpus == "":
+            corpus = None
+        declared = self.kb_encoder or {}
+        top_k = int(arguments["top_k"]) if "top_k" in arguments else int(declared.get("top_k") or 5)
+        threshold = float(arguments["threshold"]) if "threshold" in arguments else float(declared.get("score_threshold") or 0)
+        try:
+            return self.kb_index.search(
+                encoder,
+                arguments.get("query") or "",
+                corpus=corpus,
+                top_k=top_k,
+                threshold=threshold,
+            )
+        except Exception as exc:  # IndexMismatch
+            return {
+                "status": "error",
+                "error_code": getattr(exc, "code", "index_mismatch"),
+                "hits": [],
+                "kb_version": manifest.get("index_version"),
+                "encoder_kind": manifest.get("encoder_kind"),
+                "semantic": bool(manifest.get("semantic")),
+                "fallback": False,
+            }
+
+    def _quote_synthetic(self, arguments: dict) -> dict:
+        if self.kb_index is None:
+            return {
+                "status": "error",
+                "error_code": self.kb_index_error or "index_unavailable",
+                "snapshot_id": "synthetic-platform-catalog-v1",
+                "items": [],
+                "product_id": arguments.get("product_id"),
+            }
+        quoted = self.kb_index.quote(arguments["product_id"], fresh=bool(arguments.get("fresh", False)))
+        quoted["catalog"] = "fictional_platform"
+        return quoted
 
     def call_tool(self, tool_name: str, arguments: dict) -> dict:
         self.call_count += 1

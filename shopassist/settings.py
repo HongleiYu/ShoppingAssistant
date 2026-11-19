@@ -106,6 +106,22 @@ DEFAULTS = {
         "training_ca": "configs/sft_ca_smoke.json",
         "training_pa": "configs/sft_pa_smoke.json",
     },
+    "knowledge": {
+        "policy_count": 50,
+        "product_count": 1000,
+        "seed": 0,
+        "policy_path": "data/synthetic_kb/policies.json",
+        "product_path": "data/synthetic_kb/products.json",
+        "index_dir": "data/kb_index",
+        "encoder": "hashing_lexical_baseline",
+        "embedding_model": "",
+        "embedding_dim": 128,
+        "encoder_version": "hash-v1",
+        "top_k": 5,
+        "score_threshold": 0.2,
+        "chunk_chars": 700,
+        "index_version": "kb-index-v1",
+    },
 }
 
 _SECRET_KEYS = {"api_key", "password", "secret", "authorization"}
@@ -152,6 +168,12 @@ _ENV_INTS = {
     "SHOPASSIST_UI_MAX_BODY_BYTES": "ui.max_body_bytes",
     "SHOPASSIST_PROGRESS_AFTER_MS": "progress.pending_after_ms",
     "SHOPASSIST_MILESTONE_MIN_INTERVAL_MS": "progress.milestone_min_interval_ms",
+    "SHOPASSIST_KB_POLICY_COUNT": "knowledge.policy_count",
+    "SHOPASSIST_KB_PRODUCT_COUNT": "knowledge.product_count",
+    "SHOPASSIST_KB_SEED": "knowledge.seed",
+    "SHOPASSIST_KB_DIM": "knowledge.embedding_dim",
+    "SHOPASSIST_KB_TOP_K": "knowledge.top_k",
+    "SHOPASSIST_KB_CHUNK_CHARS": "knowledge.chunk_chars",
 }
 
 _ENV_FLOATS = {
@@ -161,7 +183,20 @@ _ENV_FLOATS = {
     "SHOPASSIST_TOOL_TIMEOUT_SECONDS": "mcp.tool_timeout_seconds",
     "SHOPASSIST_CACHE_SOCKET_TIMEOUT": "cache.socket_timeout_seconds",
     "SHOPASSIST_MYSQL_CONNECT_TIMEOUT": "mysql.connect_timeout_seconds",
+    "SHOPASSIST_KB_THRESHOLD": "knowledge.score_threshold",
 }
+
+_ENV_STRINGS.update(
+    {
+        "SHOPASSIST_KB_ENCODER": "knowledge.encoder",
+        "SHOPASSIST_KB_EMBEDDING_MODEL": "knowledge.embedding_model",
+        "SHOPASSIST_KB_ENCODER_VERSION": "knowledge.encoder_version",
+        "SHOPASSIST_KB_POLICY_PATH": "knowledge.policy_path",
+        "SHOPASSIST_KB_PRODUCT_PATH": "knowledge.product_path",
+        "SHOPASSIST_KB_INDEX": "knowledge.index_dir",
+        "SHOPASSIST_KB_INDEX_VERSION": "knowledge.index_version",
+    }
+)
 
 _ENV_BOOLS = {
     "SHOPASSIST_OPT_IN_CONFIGURED_MODEL": "opt_in_configured_model",
@@ -178,8 +213,18 @@ class SettingsError(RuntimeError):
         super().__init__(code)
 
 
-def load_settings(path: str | None = None, overrides: dict | None = None, environ: dict | None = None) -> dict:
-    """Return a fresh settings dict. Callers keep the copy they receive."""
+def load_settings(path: str | None = None, overrides: dict | None = None, environ: dict | None = None, *, defaults_only: bool = False) -> dict:
+    """Return a fresh settings dict. Callers keep the copy they receive.
+
+    ``defaults_only`` skips the config file and the process environment.
+    The browser demo uses that so a developer's local file cannot change the page.
+    """
+    if defaults_only:
+        data = deepcopy(DEFAULTS)
+        if overrides:
+            _merge(data, overrides, "")
+        _validate(data)
+        return data
     env = os.environ if environ is None else environ
     data = deepcopy(DEFAULTS)
     file_data = _read_config_file(path, env)
@@ -393,6 +438,23 @@ def _validate(data: dict) -> None:
     _positive("recovery.jitter_ratio", data["recovery"]["jitter_ratio"], minimum=0)
     if data["recovery"]["jitter_ratio"] > 1 or not isinstance(data["recovery"]["honor_retry_after"], bool):
         raise SettingsError("invalid_setting", {"path": "recovery"})
+    knowledge = data["knowledge"]
+    _positive("knowledge.policy_count", knowledge["policy_count"], minimum=1)
+    _positive("knowledge.product_count", knowledge["product_count"], minimum=1)
+    _positive("knowledge.embedding_dim", knowledge["embedding_dim"], minimum=8)
+    _positive("knowledge.top_k", knowledge["top_k"], minimum=1)
+    _positive("knowledge.chunk_chars", knowledge["chunk_chars"], minimum=80)
+    _positive("knowledge.score_threshold", knowledge["score_threshold"], minimum=0)
+    if knowledge["score_threshold"] > 1:
+        raise SettingsError("invalid_setting", {"path": "knowledge.score_threshold"})
+    if knowledge["encoder"] not in {"hashing_lexical_baseline", "sentence_transformers"}:
+        raise SettingsError("invalid_setting", {"path": "knowledge.encoder"})
+    if knowledge["encoder"] == "hashing_lexical_baseline" and knowledge["embedding_model"]:
+        raise SettingsError("invalid_setting", {"path": "knowledge.embedding_model"})
+    if knowledge["encoder"] == "sentence_transformers" and not knowledge["embedding_model"]:
+        raise SettingsError("invalid_setting", {"path": "knowledge.embedding_model"})
+    if not isinstance(knowledge["seed"], int) or isinstance(knowledge["seed"], bool):
+        raise SettingsError("invalid_setting", {"path": "knowledge.seed"})
 
 
 def _positive(path: str, value, minimum: float) -> None:

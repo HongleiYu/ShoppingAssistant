@@ -31,7 +31,9 @@ Built-in tools:
 | `catalog.compare` | Supported records for several ids |
 | `kb.get_policy` | Topic lookup |
 | `kb.get_document` | One document |
-| `kb.search` | Literal topic or title match |
+| `kb.search` | Literal topic or title match on the tiny fixture documents |
+| `kb.retrieve` | Rank fictional policy or product chunks. The default score is a hashing baseline |
+| `kb.quote_product` | Price and stock for one fictional platform product |
 
 Resources: `catalog://snapshot`, `catalog://name-index`, `kb://documents`, `kb://doc/{doc_id}`. The name index has ids and names, not prices.
 
@@ -46,6 +48,7 @@ The client validates tool payloads. A payload that fails the schema becomes `mal
 | `product_compare` | 1.0.0 | `catalog.compare`, `catalog.get_attributes` |
 | `policy_lookup` | 1.0.0 | `kb.get_policy`, `kb.get_document`, `kb.search` |
 | `budget_attribute_validate` | 1.0.0 | none |
+| `knowledge_retrieve` | 1.0.0 | `kb.retrieve`, `kb.quote_product` |
 
 ## Agent outputs
 

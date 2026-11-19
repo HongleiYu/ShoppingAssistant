@@ -44,12 +44,14 @@ class ToolGateway:
 
 
 class SessionSandbox:
-    def __init__(self, root: Path, seed: int, faults: list[dict], max_calls: int = 30, timeout: float = 2.0):
+    def __init__(self, root: Path, seed: int, faults: list[dict], max_calls: int = 30, timeout: float = 2.0, index_dir: str | None = None, knowledge: dict | None = None):
         self.root = root
         self.seed = seed
         self.faults = faults
         self.max_calls = max_calls
         self.timeout = timeout
+        self.index_dir = index_dir
+        self.knowledge = knowledge
         self.workspace = root / "workspace"
         self.workspace.mkdir(parents=True, exist_ok=True)
         self.process: MCPProcess | None = None
@@ -58,9 +60,9 @@ class SessionSandbox:
         self._start()
 
     @classmethod
-    def start(cls, *, seed: int = 0, faults: list[dict] | None = None, max_calls: int = 30, timeout: float = 2.0, root: Path | None = None):
+    def start(cls, *, seed: int = 0, faults: list[dict] | None = None, max_calls: int = 30, timeout: float = 2.0, root: Path | None = None, index_dir: str | None = None, knowledge: dict | None = None):
         base = Path(root) if root else Path(mkdtemp(prefix="shopassist-session-"))
-        return cls(base, seed, list(faults or []), max_calls=max_calls, timeout=timeout)
+        return cls(base, seed, list(faults or []), max_calls=max_calls, timeout=timeout, index_dir=index_dir, knowledge=knowledge)
 
     def _write_inputs(self) -> tuple[Path, Path, Path]:
         catalog_path = self.root / "catalog.json"
@@ -68,10 +70,19 @@ class SessionSandbox:
         profile_path = self.root / "profile.json"
         export_catalog(catalog_path)
         export_kb(kb_path)
-        profile_path.write_text(
-            json.dumps({"seed": self.seed, "faults": self.faults, "max_calls": self.max_calls}, sort_keys=True),
-            encoding="utf-8",
-        )
+        profile = {"seed": self.seed, "faults": self.faults, "max_calls": self.max_calls}
+        if self.index_dir:
+            profile["kb_index"] = str(self.index_dir)
+        if self.knowledge:
+            profile["kb_encoder"] = {
+                "encoder": self.knowledge.get("encoder"),
+                "embedding_model": self.knowledge.get("embedding_model") or "",
+                "embedding_dim": self.knowledge.get("embedding_dim"),
+                "encoder_version": self.knowledge.get("encoder_version"),
+                "top_k": self.knowledge.get("top_k"),
+                "score_threshold": self.knowledge.get("score_threshold"),
+            }
+        profile_path.write_text(json.dumps(profile, sort_keys=True), encoding="utf-8")
         return catalog_path, kb_path, profile_path
 
     def _start(self) -> None:
