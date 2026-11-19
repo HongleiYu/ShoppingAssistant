@@ -20,6 +20,9 @@ let entryId = "";
 let pendingProduct = "";
 let turns = [];
 let sessionGen = 0;
+let activeScenario = null;
+let presentTimer = 0;
+let presentGen = 0;
 const inflight = new Map();
 
 const t = () => config.ui[locale];
@@ -46,11 +49,14 @@ async function init() {
     }
   });
   cancel.addEventListener("click", () => {
+    stopPresentation();
     if (active) inflight.delete(active);
+    clearProgress();
     active = 0;
     cancel.hidden = true;
     send.disabled = !ready;
     status.textContent = t().cancelled;
+    renderTranscript();
   });
   renderTranscript();
   renderTrace();
@@ -111,11 +117,12 @@ function applyChrome() {
   document.querySelector("#cancel").textContent = text.cancel;
   chips.setAttribute("aria-label", text.shortcuts);
   chips.replaceChildren();
-  for (const prompt of config.prompts[locale] || []) {
+  const prompts = activeScenario ? activeScenario.suggestions[locale] : (config.prompts[locale] || []).map((item) => item.text);
+  for (const prompt of prompts) {
     const button = document.createElement("button");
     button.type = "button";
-    button.textContent = prompt.text;
-    button.addEventListener("click", () => submitUser(prompt.text));
+    button.textContent = prompt;
+    button.addEventListener("click", () => submitUser(prompt));
     chips.appendChild(button);
   }
   renderScenarios();
@@ -158,7 +165,9 @@ function renderScenarios() {
 
 function enterScenario(scenario) {
   const productId = scenario.product_ids[0];
+  stopPresentation();
   sessionGen += 1;
+  activeScenario = scenario;
   turns = [];
   consult = null;
   pendingProduct = productId;
@@ -166,7 +175,9 @@ function enterScenario(scenario) {
   inflight.clear();
   active = 0;
   cancel.hidden = true;
+  clearProgress();
   scenarios.close();
+  applyChrome();
   renderTranscript();
   renderTrace();
   if (!ready) {
@@ -208,6 +219,10 @@ function onWorker(event) {
       return;
     }
     consult = result;
+    if (!activeScenario && result.product_id) {
+      activeScenario = config.scenarios.find((item) => item.id === "consult_price" && item.product_ids[0] === result.product_id) || null;
+      applyChrome();
+    }
     renderTranscript();
     renderTrace();
     status.textContent = t().ready;
@@ -219,26 +234,19 @@ function onWorker(event) {
     if (!meta || meta.gen !== sessionGen) return;
     finishWait();
     if (!data.turn || !data.turn.ok) {
+      clearProgress();
+      finishWait();
       showNote(t()[data.turn && data.turn.error] || t().runtime_error);
       return;
     }
-    turns.push({ user: meta.text, turn: data.turn });
-    if (data.turn.consulted_product_id && data.turn.cards && data.turn.cards.length === 1 && data.turn.cards[0].fields && data.turn.cards[0].fields.price != null) {
-      consult = {
-        ok: true,
-        product_id: data.turn.consulted_product_id,
-        card: data.turn.cards[0],
-      };
-    }
-    renderTranscript();
-    renderTrace();
-    status.textContent = t().done;
+    beginPresentation(meta, data.turn);
     return;
   }
   if (data.type === "error") {
     const meta = inflight.get(data.id);
     inflight.delete(data.id);
     if (meta && meta.gen !== sessionGen) return;
+    clearProgress();
     finishWait();
     showNote(t().runtime_error);
   }
@@ -280,11 +288,18 @@ function renderTranscript() {
     block.className = "bubble assistant";
     const stack = document.createElement("div");
     stack.className = "stack";
-    stack.appendChild(productCard(consult.card));
+    stack.appendChild(welcomeGallery());
     const welcome = document.createElement("div");
     welcome.className = "text";
     welcome.dataset.role = "welcome";
-    welcome.textContent = t().welcome;
+    welcome.textContent = activeScenario ? activeScenario.welcome[locale] : t().welcome;
+    if (activeScenario && activeScenario.context_note) {
+      const context = document.createElement("p");
+      context.className = "note";
+      context.dataset.role = "context";
+      context.textContent = activeScenario.context_note[locale];
+      stack.appendChild(context);
+    }
     const note = document.createElement("p");
     note.className = "note";
     note.textContent = t().no_checkout;
@@ -305,16 +320,23 @@ function turnBlock(item) {
   said.className = "text";
   said.textContent = item.user;
   user.appendChild(said);
+  if (item.pending) {
+    wrap.appendChild(user);
+    return wrap;
+  }
   const assistant = document.createElement("article");
   assistant.className = "bubble assistant";
   const stack = document.createElement("div");
   stack.className = "stack";
   const reply = document.createElement("div");
-  reply.className = "text";
-  reply.textContent = displayReply(item.turn);
+  reply.className = "text reply";
+  const full = displayReply(item.turn);
+  reply.textContent = typeof item.revealed === "string" ? item.revealed : full;
   stack.appendChild(reply);
-  for (const card of item.turn.cards || []) {
-    if (card.fields && card.fields.price != null) stack.appendChild(productCard(card));
+  if (item.revealed == null) {
+    for (const card of item.turn.display_cards || []) {
+      if (card.fields && card.fields.price != null) stack.appendChild(productCard(card));
+    }
   }
   assistant.appendChild(stack);
   wrap.append(user, assistant);
@@ -399,7 +421,13 @@ function traceNodes(turn) {
   addRow(root, t().route, `${t().routes[turn.route] || turn.route} · ${turn.route_reason_code || ""}`);
   addRow(root, t().planner, turn.planner_invoked ? t().planner_yes : t().planner_no);
   addRow(root, t().terminal, `${t().terminals[turn.terminal && turn.terminal.status] || ""} · ${(turn.terminal && turn.terminal.reason_code) || ""}`);
-  addRow(root, t().model, turn.model_called ? "called" : t().model_no);
+  addRow(root, t().model, turn.simulated_model ? t().model_simulated : (turn.model_called ? "called" : t().model_no));
+  for (const call of turn.model_invocations || []) {
+    const line = document.createElement("p");
+    line.className = "model-call";
+    line.textContent = `${call.agent} ${call.phase} · ${call.adapter || ""} · simulated · no network`;
+    root.appendChild(line);
+  }
   addRow(root, t().gate, fill(t().gate_line, {
     allowed: turn.evidence_gate ? turn.evidence_gate.allowed_count : 0,
     blocked: turn.evidence_gate && turn.evidence_gate.blocked ? turn.evidence_gate.blocked.length : 0,
@@ -448,6 +476,123 @@ function note(text) {
   node.className = "note";
   node.textContent = text;
   return node;
+}
+
+function welcomeGallery() {
+  const wrap = document.createElement("div");
+  wrap.className = "welcome-products";
+  const ids = activeScenario && activeScenario.product_ids.length ? activeScenario.product_ids : [consult.product_id];
+  for (const productId of ids) {
+    if (consult.card && consult.card.product_id === productId) {
+      wrap.appendChild(productCard(consult.card));
+      continue;
+    }
+    const card = document.createElement("article");
+    card.className = "product-card";
+    const img = productImage(productId, productId);
+    if (img) card.appendChild(img);
+    const name = document.createElement("strong");
+    name.textContent = productId;
+    card.appendChild(name);
+    wrap.appendChild(card);
+  }
+  return wrap;
+}
+
+function beginPresentation(meta, turn) {
+  const gen = meta.gen;
+  stopPresentation();
+  presentGen = gen;
+  const steps = turn.presentation || [];
+  let index = 0;
+  const motion = reducedMotion();
+  const stepMs = motion ? 0 : Number(config.stream.step_ms) || 0;
+  turns.push({ user: meta.text, turn, revealed: "", pending: true });
+  renderTranscript();
+  renderTrace();
+  showProgress(steps.length ? `${t().stream_label} ${progressText(steps[0])}` : t().stream_label);
+  index = steps.length ? 1 : 0;
+  const tick = () => {
+    if (gen !== sessionGen || gen !== presentGen) return;
+    if (index < steps.length) {
+      showProgress(`${t().stream_label} ${progressText(steps[index])}`);
+      index += 1;
+      presentTimer = window.setTimeout(tick, stepMs);
+      return;
+    }
+    streamReply(gen, meta, turn);
+  };
+  presentTimer = window.setTimeout(tick, stepMs);
+}
+
+function streamReply(gen, meta, turn) {
+  if (gen !== sessionGen || gen !== presentGen) return;
+  const answer = displayReply(turn);
+  const item = turns[turns.length - 1];
+  if (!item || item.user !== meta.text) return;
+  item.pending = false;
+  item.revealed = "";
+  const motion = reducedMotion();
+  const size = motion ? Math.max(answer.length, 1) : Math.max(1, Number(config.stream.chunk_chars) || 24);
+  const gap = motion ? 0 : Number(config.stream.chunk_ms) || 0;
+  let cursor = 0;
+  const pump = () => {
+    if (gen !== sessionGen || gen !== presentGen) return;
+    cursor = Math.min(answer.length, cursor + size);
+    item.revealed = cursor >= answer.length ? null : answer.slice(0, cursor);
+    if (item.revealed == null) {
+      clearProgress();
+      presentTimer = 0;
+      renderTranscript();
+      renderTrace();
+      status.textContent = t().done;
+      finishWait();
+      return;
+    }
+    const node = transcript.querySelector(".exchange:last-of-type .reply");
+    if (node) node.textContent = item.revealed;
+    presentTimer = window.setTimeout(pump, gap);
+  };
+  pump();
+}
+
+function showProgress(text) {
+  let node = transcript.querySelector(".progress-live");
+  if (!node) {
+    node = document.createElement("p");
+    node.className = "progress-live";
+    node.setAttribute("role", "status");
+    transcript.appendChild(node);
+  }
+  node.textContent = text;
+}
+
+function clearProgress() {
+  const node = transcript.querySelector(".progress-live");
+  if (node) node.remove();
+}
+
+function stopPresentation() {
+  if (turns.length && (turns[turns.length - 1].pending || typeof turns[turns.length - 1].revealed === "string")) turns.pop();
+  presentGen += 1;
+  if (presentTimer) window.clearTimeout(presentTimer);
+  presentTimer = 0;
+}
+
+function reducedMotion() {
+  return window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
+function progressText(step) {
+  if (!step) return t().sim_running;
+  if (step.kind === "grounded") {
+    const bits = (step.facts || []).map((fact) => `${fact.field}=${fact.value}`).join(", ");
+    return `${t().validated_facts} ${bits}`;
+  }
+  if (step.agent === "ca" && step.route === "complex_handoff") return t().sim_ca_handoff;
+  if (step.agent === "ca" && step.skill_id) return fill(t().sim_ca_tool, { skill: step.skill_id });
+  if (step.agent === "pa") return fill(t().sim_pa, { phase: step.phase || "", skill: step.skill_id || "" }).replace(/\s+/g, " ").trim();
+  return t().sim_running;
 }
 
 function fill(template, values) {
