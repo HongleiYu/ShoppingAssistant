@@ -215,6 +215,25 @@
         "size": "hand",
         "warranty_months": 6
       }
+    },
+    {
+      "currency": "USD",
+      "dynamic": {
+        "as_of": "synthetic-catalog-v1",
+        "freshness": "current",
+        "price": 48,
+        "stock": 16
+      },
+      "name": "Canvas court shoes",
+      "product_id": "prod-shoes-court",
+      "sku": "SKU-SHOES-COURT",
+      "static_attributes": {
+        "category": "footwear",
+        "color": "sand",
+        "material": "canvas",
+        "size": "42",
+        "warranty_months": 6
+      }
     }
   ],
   "snapshot_id": "synthetic-catalog-v1"

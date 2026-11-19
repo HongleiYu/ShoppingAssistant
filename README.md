@@ -149,11 +149,13 @@ Open the page and choose **Configured model**. The server calls the CA endpoint,
 
 `python -m shopassist.pages.build --output site --base /ShoppingAssistant/` writes a static site. GitHub Pages cannot run the Python server, MySQL, or Redis. The page loads a pinned Pyodide build from the site itself and runs the mock session in the browser. Tool calls use the in-process gateway on the synthetic snapshots. The prebuilt knowledge index uses the hashing lexical baseline. The page does not download an embedding model and does not call MCP or a vector database.
 
+The shop name on the page is Demo Flagship Store, and 演示旗舰店 in Chinese. English is the default. The first screen is a consultation for the catalog item Canvas court shoes (`prod-shoes-court`, 48 USD, stock 16). Product photos are original files shipped with the page. The layout is a conversation on the left and the execution trace on the right. Bot messages stay on the left of the conversation and shopper messages stay on the right. Nothing is sent automatically. Supported scenarios opens a list; each scenario has one Enter button, which starts a fresh conversation on that scenario's product and does not send a question. The trace panel shows the route, skills, tools, and evidence gate recorded for the turns in the current conversation.
+
 This page runs the mock communication agent, planner, skills, and evidence gate inside the browser. It does not call a chat-completions model.
 
 Catalog, policy, and shipment tools run in-process on the synthetic snapshots. There is no MCP child process and no network call to a store or carrier.
 
-Session memory uses in-memory SQLite and an in-memory cache. MySQL and Redis are not used. Reset clears them.
+Session memory uses in-memory SQLite and an in-memory cache. MySQL and Redis are not used. Entering a scenario clears them.
 
 The separate local Python server can use a configured model endpoint. This page never contacts that server and has no place to enter an API key.
 

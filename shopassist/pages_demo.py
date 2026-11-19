@@ -29,11 +29,25 @@ def load_demo_config() -> dict:
     if not isinstance(data, dict):
         raise ValueError("demo_config_not_object")
     prompts = data.get("prompts")
-    guided = data.get("guided") or {}
+    scenarios = data.get("scenarios")
+    images = data.get("images")
     if not isinstance(prompts, dict) or "en" not in prompts or "zh" not in prompts:
         raise ValueError("demo_config_missing_fields")
-    if not data.get("max_message_chars") or not guided.get("step_ids") or not data.get("scenarios"):
+    if not data.get("max_message_chars") or not isinstance(scenarios, list) or not scenarios:
         raise ValueError("demo_config_missing_fields")
+    if not isinstance(images, dict) or data.get("default_product_id") not in images:
+        raise ValueError("demo_config_missing_fields")
+    if data.get("brand") != "Demo Flagship Store" or data.get("brand_zh") != "演示旗舰店":
+        raise ValueError("demo_config_missing_fields")
+    for scenario in scenarios:
+        product_ids = scenario.get("product_ids")
+        if not isinstance(product_ids, list) or not product_ids:
+            raise ValueError("demo_config_missing_fields")
+        if not isinstance(scenario.get("purpose"), dict) or not isinstance(scenario.get("samples"), dict):
+            raise ValueError("demo_config_missing_fields")
+        for product_id in product_ids:
+            if product_id not in images:
+                raise ValueError("demo_config_missing_fields")
     return data
 
 

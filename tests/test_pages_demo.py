@@ -31,13 +31,38 @@ class PagesProjectionTest(unittest.TestCase):
         for locale, prompts in config["prompts"].items():
             for prompt in prompts:
                 self.assertEqual(detect_intent(prompt["text"]), prompt["intent"], locale)
-        guided = []
+        self.assertEqual(config["brand"], "Demo Flagship Store")
+        self.assertEqual(config["brand_zh"], "演示旗舰店")
+        self.assertEqual(config["default_product_id"], "prod-shoes-court")
+        self.assertNotIn("guided", config)
+        self.assertNotIn("澄清", json.dumps(config["ui"]["zh"]["title"], ensure_ascii=False))
+        from shopassist.builtin_data import PRODUCTS
+
+        catalog_ids = {row["product_id"] for row in PRODUCTS}
+        self.assertIn("prod-shoes-court", catalog_ids)
+        seen = set()
         for scenario in config["scenarios"]:
+            self.assertNotIn(scenario["id"], seen)
+            seen.add(scenario["id"])
+            self.assertGreaterEqual(len(scenario["product_ids"]), 1)
+            self.assertEqual(len(scenario["product_ids"]), len(set(scenario["product_ids"])))
             for locale, text in scenario["samples"].items():
                 self.assertEqual(detect_intent(text), scenario["intent"], text)
-            if scenario["id"] in config["guided"]["step_ids"]:
-                guided.append(scenario["id"])
-        self.assertEqual(guided, config["guided"]["step_ids"])
+            for product_id in scenario["product_ids"]:
+                self.assertIn(product_id, catalog_ids)
+                relative = config["images"][product_id]
+                blob = (ROOT / "shopassist" / "pages" / "static" / relative).read_bytes()
+                self.assertGreater(len(blob), 1000)
+                self.assertTrue(blob.startswith(b"\xff\xd8\xff"), relative)
+        html = (ROOT / "shopassist" / "pages" / "static" / "index.html").read_text(encoding="utf-8")
+        script = (ROOT / "shopassist" / "pages" / "static" / "app.js").read_text(encoding="utf-8")
+        for banned in ('id="skip"', 'id="reset"', 'id="open-trace"', 'id="replay"', 'id="own-chat"', ">New chat<", ">Skip<", ">Trace<"):
+            self.assertNotIn(banned, html)
+        self.assertIn('id="trace-panel"', html)
+        self.assertIn("Demo Flagship Store", html)
+        self.assertNotIn("startGuide", script)
+        self.assertNotIn("sessionStorage", script)
+        self.assertNotIn("autoplay", script)
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
         for item in config["differences"]:
             self.assertIn(item["en"], readme)
@@ -85,6 +110,11 @@ class PagesProjectionTest(unittest.TestCase):
             self.assertNotIn("cdn.jsdelivr.net", blob)
             self.assertNotIn("127.0.0.1", blob)
             self.assertTrue((output / ".nojekyll").is_file())
+            self.assertTrue((output / "products" / "prod-shoes-court.jpg").is_file())
+            demo = json.loads((output / "demo-config.json").read_text(encoding="utf-8"))
+            self.assertEqual(demo["default_product_id"], "prod-shoes-court")
+            self.assertNotIn("https://", html)
+            self.assertNotIn("http://", html)
         finally:
             shutil.rmtree(output, ignore_errors=True)
 
@@ -115,6 +145,17 @@ class ProductEntryTest(unittest.TestCase):
             self.assertEqual(app.turn("How much is this item?")["cards"][0]["fields"]["price"], 12)
             self.assertFalse(app.consult("prod-not-real")["ok"])
             self.assertFalse(app.consult("../secret")["ok"])
+            shoes = app.consult("prod-shoes-court")
+            self.assertTrue(shoes["ok"])
+            self.assertEqual(shoes["card"]["name"], "Canvas court shoes")
+            self.assertEqual(shoes["card"]["fields"]["price"], 48)
+            self.assertEqual(shoes["card"]["fields"]["stock"], 16)
+            self.assertEqual(shoes["card"]["fields"]["category"], "footwear")
+            self.assertNotIn("price", shoes["tool"]["arguments"])
+            asked_shoes = app.turn("How much is this item?")
+            self.assertEqual(asked_shoes["consulted_product_id"], "prod-shoes-court")
+            self.assertEqual(asked_shoes["cards"][0]["fields"]["price"], 48)
+            self.assertEqual(asked_shoes["cards"][0]["fields"]["stock"], 16)
         finally:
             app.close()
 
