@@ -131,6 +131,7 @@ class AgentSession:
         self.generation = 0
         self.on_progress = None
         self._progress_generation = 0
+        self._invocation_turn = None
         self.paused_task = None
         context_settings = self.settings["context"]
         self.context = context or ContextEngine(
@@ -167,6 +168,7 @@ class AgentSession:
             return self._mock_message(text)
         finally:
             self.on_progress = None
+            self._invocation_turn = None
 
     def _mock_message(self, text: str) -> dict:
         memory_before = clone_memory(self.memory)
@@ -176,28 +178,14 @@ class AgentSession:
             self._cancel_paused()
         elif self.paused_task and self._can_resume(features):
             turn = self._blank_turn(text, memory_before, decision)
+            self._invocation_turn = turn
+            self._record_ca_route(turn, features, decision)
             rendered = self._resume(features, decision, text, turn)
+            self._record_ca_answer(turn, rendered)
             return self._commit(text, turn, rendered)
-        turn = {
-            "memory_before": memory_before,
-            "user_text": text,
-            "route": decision["route"],
-            "route_reason_code": decision["route_reason_code"],
-            "planner_invoked": False,
-            "task_id": None,
-            "task_created": False,
-            "plan": [],
-            "skills": [],
-            "tools": [],
-            "recovery": [],
-            "claims": [],
-            "limitations": [],
-            "evidence": [],
-            "reply_text": "",
-            "escalated": False,
-            "memory": clone_memory(self.memory),
-            "schema_ok": True,
-        }
+        turn = self._blank_turn(text, memory_before, decision)
+        self._invocation_turn = turn
+        self._record_ca_route(turn, features, decision)
         if decision["route"] == "direct_answer":
             rendered = render_direct(decision["intent"])
         elif decision["route"] == "clarification":
@@ -211,6 +199,7 @@ class AgentSession:
             rendered = self._handoff(features, decision, text, turn)
         else:
             rendered = render_clarification(decision)
+        self._record_ca_answer(turn, rendered)
         return self._commit(text, turn, rendered)
 
     def _commit(self, text: str, turn: dict, rendered: dict) -> dict:
@@ -266,6 +255,7 @@ class AgentSession:
             "escalated": False,
             "memory": clone_memory(self.memory),
             "schema_ok": True,
+            "model_invocations": [],
         }
 
     def _should_supersede(self, decision: dict) -> bool:
@@ -623,7 +613,44 @@ class AgentSession:
             return self.decider(task, state, self.plan_registry)
         if self.mode == "configured_endpoint":
             return self._pa_decide(task, state)
-        return act(task, state, self.plan_registry)
+        outcome = act(task, state, self.plan_registry)
+        turn = self._invocation_turn
+        if turn is not None:
+            from shopassist.mock_agents import pa_record
+
+            turn.setdefault("model_invocations", []).append(pa_record(task, outcome))
+            call = outcome.get("skill_call") or {}
+            self._emit_model("pa", outcome.get("action") or "step", call.get("skill_id"))
+        return outcome
+
+    def _record_ca_route(self, turn: dict, features: dict, decision: dict) -> None:
+        from shopassist.mock_agents import ca_route_record, needs_route_call
+
+        if not needs_route_call(decision):
+            return
+        turn.setdefault("model_invocations", []).append(ca_route_record(features, decision))
+        self._emit_model("ca", "route", decision.get("skill_id") or decision.get("goal_type"))
+
+    def _record_ca_answer(self, turn: dict, rendered: dict) -> None:
+        from shopassist.mock_agents import ca_answer_record
+
+        turn.setdefault("model_invocations", []).append(ca_answer_record(turn, rendered))
+        self._emit_model("ca", "answer", None)
+
+    def _emit_model(self, agent: str, phase: str, skill_id: str | None) -> None:
+        if self.on_progress is None or self._progress_generation != self.generation:
+            return
+        self.on_progress(
+            {
+                "type": "progress",
+                "kind": "model",
+                "agent": agent,
+                "phase": phase,
+                "skill_id": skill_id,
+                "simulated": True,
+                "network": False,
+            }
+        )
 
     def _record_skill(self, turn: dict, result: dict, already_normalized: bool = False) -> None:
         skill_id = result.get("skill_id")

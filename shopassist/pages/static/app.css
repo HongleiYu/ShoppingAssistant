@@ -48,6 +48,9 @@ button:focus-visible, textarea:focus-visible { outline: 3px solid #0e6e6b; outli
   display: grid; grid-template-columns: 88px 1fr; gap: 12px; align-items: center;
   background: var(--card); border: 1px solid var(--line); border-radius: 16px;
 }
+.progress-live { color: #8d877c; font-size: 13px; margin: 0 0 12px; }
+.welcome-products { display: flex; flex-direction: column; gap: 8px; }
+.model-call { font-size: 13px; margin: 4px 0; }
 .product-photo, .scenario-photos img {
   width: 88px; height: 88px; object-fit: cover; border-radius: 12px; background: #f6f1e8; display: block;
 }

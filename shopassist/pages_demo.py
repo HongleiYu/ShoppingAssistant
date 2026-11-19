@@ -45,6 +45,18 @@ def load_demo_config() -> dict:
             raise ValueError("demo_config_missing_fields")
         if not isinstance(scenario.get("purpose"), dict) or not isinstance(scenario.get("samples"), dict):
             raise ValueError("demo_config_missing_fields")
+        welcome = scenario.get("welcome") or {}
+        suggestions = scenario.get("suggestions") or {}
+        context_note = scenario.get("context_note") or {}
+        if not welcome.get("en") or not welcome.get("zh"):
+            raise ValueError("demo_config_missing_fields")
+        if not context_note.get("en") or not context_note.get("zh"):
+            raise ValueError("demo_config_missing_fields")
+        if not suggestions.get("en") or not suggestions.get("zh"):
+            raise ValueError("demo_config_missing_fields")
+    stream = data.get("stream") or {}
+    if not stream.get("step_ms") or not stream.get("chunk_chars"):
+        raise ValueError("demo_config_missing_fields")
         for product_id in product_ids:
             if product_id not in images:
                 raise ValueError("demo_config_missing_fields")
@@ -138,14 +150,92 @@ def project_turn(turn: dict, *, request_id: str, duration_ms: float) -> dict:
             "cache_status": context.get("cache_status"),
         },
         "model_called": False,
+        "simulated_model": bool(turn.get("model_invocations")),
+        "network_model": False,
         "token_usage": None,
         "token_usage_reason": "unavailable_for_mock",
         "mcp_process": False,
+        "model_invocations": _public_invocations(turn.get("model_invocations") or []),
+        "display_cards": _display_cards(turn, _cards(turn)),
+        "presentation": _presentation(turn.get("model_invocations") or [], [
+            {
+                "field": claim.get("field"),
+                "value": claim.get("value"),
+                "product_id": claim.get("product_id"),
+            }
+            for claim in turn.get("claims") or []
+            if claim.get("field")
+        ]),
+        "stream": {"source": "validated_reply_replay", "simulated": True, "network": False},
     }
     _drop_banned(payload)
     cleaned, count = scrub_object(payload)
     cleaned["redaction_count"] = count
     return cleaned
+
+
+def _public_invocations(items: list[dict]) -> list[dict]:
+    rows = []
+    for item in items:
+        rows.append(
+            {
+                "agent": item.get("agent"),
+                "phase": item.get("phase"),
+                "simulated": True,
+                "network": False,
+                "adapter": item.get("adapter"),
+                "input": item.get("input") or {},
+                "output": item.get("output") or {},
+            }
+        )
+    return rows
+
+
+def _display_cards(turn: dict, cards: list[dict]) -> list[dict]:
+    skill_ids = [item.get("skill_id") for item in turn.get("skills") or []]
+    if any(skill_id in {"product_search", "product_compare"} for skill_id in skill_ids):
+        return cards
+    consulted_before = (turn.get("memory_before") or {}).get("consulted_product_id")
+    if "product_quote" in skill_ids:
+        if len(cards) == 1 and cards[0].get("product_id") == consulted_before:
+            return []
+        return cards
+    return []
+
+
+def _presentation(invocations: list[dict], facts: list[dict]) -> list[dict]:
+    steps = []
+    for item in invocations:
+        if item.get("phase") == "answer":
+            continue
+        output = item.get("output") or {}
+        steps.append(
+            {
+                "kind": "running",
+                "agent": item.get("agent"),
+                "phase": item.get("phase"),
+                "skill_id": output.get("skill_id"),
+                "route": output.get("route"),
+                "simulated": True,
+                "network": False,
+            }
+        )
+    grounded = []
+    for fact in facts:
+        if not fact.get("field"):
+            continue
+        grounded.append(
+            {
+                "field": fact.get("field"),
+                "value": fact.get("value"),
+                "product_id": fact.get("product_id"),
+            }
+        )
+        if len(grounded) == 6:
+            break
+    if grounded:
+        steps.append({"kind": "grounded", "facts": grounded, "simulated": True, "network": False})
+    return steps
 
 
 def comparable(projection: dict) -> dict:

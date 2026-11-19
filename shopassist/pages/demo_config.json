@@ -37,6 +37,10 @@
     {
       "en": "Knowledge search on this page uses the prebuilt hashing lexical baseline shipped with the static files. It is not a semantic embedding and it is not a live vector database or MCP process.",
       "zh": "本页的知识检索使用随静态文件发布的哈希词面索引。它不是语义向量，也不是在线向量库或 MCP 进程。"
+    },
+    {
+      "en": "The page records a simulated communication-agent and planner lifecycle around the real tool calls, then reveals the validated reply in short steps. Those calls do not leave the browser, and the pauses are not model latency.",
+      "zh": "页面在真实工具调用前后记录模拟的沟通代理和规划代理过程，再把已核对的回答分段显示。这些调用不出浏览器，停顿也不是模型延迟。"
     }
   ],
   "images": {
@@ -55,82 +59,337 @@
   },
   "prompts": {
     "en": [
-      {"id": "price", "text": "How much is this item?", "intent": "quote"},
-      {"id": "stock", "text": "Is this item in stock?", "intent": "quote"},
-      {"id": "returns", "text": "What is the return window?", "intent": "policy_returns"},
-      {"id": "other", "text": "How much is the Blue stoneware mug 350 ml?", "intent": "quote"}
+      {
+        "id": "price",
+        "text": "How much is this item?",
+        "intent": "quote"
+      },
+      {
+        "id": "stock",
+        "text": "Is this item in stock?",
+        "intent": "quote"
+      },
+      {
+        "id": "returns",
+        "text": "What is the return window?",
+        "intent": "policy_returns"
+      },
+      {
+        "id": "other",
+        "text": "How much is the Blue stoneware mug 350 ml?",
+        "intent": "quote"
+      }
     ],
     "zh": [
-      {"id": "price", "text": "这个商品多少钱？", "intent": "quote"},
-      {"id": "stock", "text": "这个商品有货吗？", "intent": "quote"},
-      {"id": "returns", "text": "退货时限是多久？", "intent": "policy_returns"},
-      {"id": "other", "text": "Blue stoneware mug 350 ml 多少钱？", "intent": "quote"}
+      {
+        "id": "price",
+        "text": "这个商品多少钱？",
+        "intent": "quote"
+      },
+      {
+        "id": "stock",
+        "text": "这个商品有货吗？",
+        "intent": "quote"
+      },
+      {
+        "id": "returns",
+        "text": "退货时限是多久？",
+        "intent": "policy_returns"
+      },
+      {
+        "id": "other",
+        "text": "Blue stoneware mug 350 ml 多少钱？",
+        "intent": "quote"
+      }
     ]
   },
   "scenarios": [
     {
       "id": "consult_price",
       "intent": "quote",
-      "product_ids": ["prod-shoes-court"],
-      "purpose": {"en": "Ask the price of the canvas court shoes opened from the product page.", "zh": "询问从商品页带进来的这双帆布鞋的价格。"},
-      "samples": {"en": "How much is this item?", "zh": "这个商品多少钱？"},
-      "limits": {"en": "Uses the consulted product in the session. The snapshot name stays English.", "zh": "用会话里正在看的商品。快照里的商品名仍是英文。"}
+      "product_ids": [
+        "prod-shoes-court"
+      ],
+      "purpose": {
+        "en": "Ask the price of the canvas court shoes opened from the product page.",
+        "zh": "询问从商品页带进来的这双帆布鞋的价格。"
+      },
+      "samples": {
+        "en": "How much is this item?",
+        "zh": "这个商品多少钱？"
+      },
+      "limits": {
+        "en": "Uses the consulted product in the session. The snapshot name stays English.",
+        "zh": "用会话里正在看的商品。快照里的商品名仍是英文。"
+      },
+      "welcome": {
+        "en": "Hello. You opened the canvas court shoes from the product page. Ask for the price when you want it. I will not send a question for you.",
+        "zh": "你好。你从商品页打开的是这双帆布鞋。想问价格时再发。我不会替你发出问题。"
+      },
+      "context_note": {
+        "en": "Open item: Canvas court shoes. Price and stock come from the snapshot quote.",
+        "zh": "当前商品：Canvas court shoes。价格和库存来自快照报价。"
+      },
+      "suggestions": {
+        "en": [
+          "How much is this item?",
+          "How much is the Canvas court shoes?"
+        ],
+        "zh": [
+          "这个商品多少钱？",
+          "Canvas court shoes 多少钱？"
+        ]
+      }
     },
     {
       "id": "consult_stock",
       "intent": "quote",
-      "product_ids": ["prod-shoes-court"],
-      "purpose": {"en": "Ask whether these canvas court shoes are in stock.", "zh": "询问这双帆布鞋是否有货。"},
-      "samples": {"en": "Is this item in stock?", "zh": "这个商品有货吗？"},
-      "limits": {"en": "Stock comes from the quote, not from the page address.", "zh": "库存来自报价，不来自网址。"}
+      "product_ids": [
+        "prod-shoes-court"
+      ],
+      "purpose": {
+        "en": "Ask whether these canvas court shoes are in stock.",
+        "zh": "询问这双帆布鞋是否有货。"
+      },
+      "samples": {
+        "en": "Is this item in stock?",
+        "zh": "这个商品有货吗？"
+      },
+      "limits": {
+        "en": "Stock comes from the quote, not from the page address.",
+        "zh": "库存来自报价，不来自网址。"
+      },
+      "welcome": {
+        "en": "This conversation checks whether the canvas court shoes are in stock. Ask when you are ready.",
+        "zh": "这次对话是核对这双帆布鞋有没有货。准备好再问。"
+      },
+      "context_note": {
+        "en": "Stock is read from the quote. The page address is not the stock count.",
+        "zh": "库存来自报价。网址里的内容不是库存。"
+      },
+      "suggestions": {
+        "en": [
+          "Is this item in stock?",
+          "What is the stock count for this item?"
+        ],
+        "zh": [
+          "这个商品有货吗？",
+          "这个商品库存多少？"
+        ]
+      }
     },
     {
       "id": "search_budget",
       "intent": "search",
-      "product_ids": ["prod-mug-sand", "prod-mug-blue", "prod-btl-steel"],
-      "purpose": {"en": "Search the drinkware category under a budget. These are the in-stock matches under 20.", "zh": "在预算内检索 drinkware。这些是 20 以内且有货的匹配。"},
-      "samples": {"en": "find drinkware under 20", "zh": "找 drinkware，20以内"},
-      "limits": {"en": "The category id drinkware is English in the snapshot.", "zh": "品类 id drinkware 在快照里是英文。"}
+      "product_ids": [
+        "prod-mug-sand",
+        "prod-mug-blue",
+        "prod-btl-steel"
+      ],
+      "purpose": {
+        "en": "Search the drinkware category under a budget. These are the in-stock matches under 20.",
+        "zh": "在预算内检索 drinkware。这些是 20 以内且有货的匹配。"
+      },
+      "samples": {
+        "en": "find drinkware under 20",
+        "zh": "找 drinkware，20以内"
+      },
+      "limits": {
+        "en": "The category id drinkware is English in the snapshot.",
+        "zh": "品类 id drinkware 在快照里是英文。"
+      },
+      "welcome": {
+        "en": "This conversation searches drinkware under 20. The pictures are the catalog items that search can return. Nothing is searched until you ask.",
+        "zh": "这次对话是检索 20 以内的 drinkware。图片是这次检索可能返回的目录商品。你发问之前不会检索。"
+      },
+      "context_note": {
+        "en": "Category id drinkware stays English. Budget 20 is the sample.",
+        "zh": "品类 id drinkware 仍是英文。示例预算是 20。"
+      },
+      "suggestions": {
+        "en": [
+          "find drinkware under 20"
+        ],
+        "zh": [
+          "找 drinkware，20以内"
+        ]
+      }
     },
     {
       "id": "compare",
       "intent": "compare",
-      "product_ids": ["prod-mug-sand", "prod-mug-blue"],
-      "purpose": {"en": "Compare the matte ceramic mug and the blue stoneware mug.", "zh": "对比哑光陶瓷杯和蓝色炻器杯。"},
-      "samples": {"en": "compare Matte ceramic mug 350 ml and Blue stoneware mug 350 ml", "zh": "对比 Matte ceramic mug 350 ml 和 Blue stoneware mug 350 ml"},
-      "limits": {"en": "Both names must be the snapshot names.", "zh": "两个名字都必须是快照里的英文名。"}
+      "product_ids": [
+        "prod-mug-sand",
+        "prod-mug-blue"
+      ],
+      "purpose": {
+        "en": "Compare the matte ceramic mug and the blue stoneware mug.",
+        "zh": "对比哑光陶瓷杯和蓝色炻器杯。"
+      },
+      "samples": {
+        "en": "compare Matte ceramic mug 350 ml and Blue stoneware mug 350 ml",
+        "zh": "对比 Matte ceramic mug 350 ml 和 Blue stoneware mug 350 ml"
+      },
+      "limits": {
+        "en": "Both names must be the snapshot names.",
+        "zh": "两个名字都必须是快照里的英文名。"
+      },
+      "welcome": {
+        "en": "This conversation compares the matte ceramic mug and the blue stoneware mug. Send the comparison when you want both quotes.",
+        "zh": "这次对话对比哑光陶瓷杯和蓝色炻器杯。想看两边的报价时再发送对比。"
+      },
+      "context_note": {
+        "en": "Both names must stay the snapshot names.",
+        "zh": "两个名字都必须用快照里的英文名。"
+      },
+      "suggestions": {
+        "en": [
+          "compare Matte ceramic mug 350 ml and Blue stoneware mug 350 ml"
+        ],
+        "zh": [
+          "对比 Matte ceramic mug 350 ml 和 Blue stoneware mug 350 ml"
+        ]
+      }
     },
     {
       "id": "returns",
       "intent": "policy_returns",
-      "product_ids": ["prod-shoes-court"],
-      "purpose": {"en": "Read the current return window while viewing the canvas court shoes.", "zh": "在查看这双帆布鞋时读取现行退货时限。"},
-      "samples": {"en": "What is the return window?", "zh": "退货时限是多久？"},
-      "limits": {"en": "This is the shared fixture note, not a promise from a carrier or a per-item rule.", "zh": "这是共享的夹具说明，不是承运商承诺，也不是单件商品规则。"}
+      "product_ids": [
+        "prod-shoes-court"
+      ],
+      "purpose": {
+        "en": "Read the current return window while viewing the canvas court shoes.",
+        "zh": "在查看这双帆布鞋时读取现行退货时限。"
+      },
+      "samples": {
+        "en": "What is the return window?",
+        "zh": "退货时限是多久？"
+      },
+      "limits": {
+        "en": "This is the shared fixture note, not a promise from a carrier or a per-item rule.",
+        "zh": "这是共享的夹具说明，不是承运商承诺，也不是单件商品规则。"
+      },
+      "welcome": {
+        "en": "This conversation reads the shared return note while the canvas court shoes are the open item. It is not a promise from a carrier.",
+        "zh": "这次对话在看这双帆布鞋时读取共享的退货说明。这不是承运商的承诺。"
+      },
+      "context_note": {
+        "en": "The return note is the fixture policy, not a rule stored on the shoe.",
+        "zh": "退货说明是夹具政策，不是写在这双鞋上的规则。"
+      },
+      "suggestions": {
+        "en": [
+          "What is the return window?"
+        ],
+        "zh": [
+          "退货时限是多久？"
+        ]
+      }
     },
     {
       "id": "shipment_known",
       "intent": "shipment",
-      "product_ids": ["prod-shoes-court"],
-      "purpose": {"en": "Look up synthetic tracking id TRK-OK from this shop chat.", "zh": "在这个店铺对话里查询合成单号 TRK-OK。"},
-      "samples": {"en": "tracking TRK-OK", "zh": "查物流 TRK-OK"},
-      "limits": {"en": "TRK-OK is synthetic. It is not a live carrier lookup.", "zh": "TRK-OK 是合成单号，不是实时承运商查询。"}
+      "product_ids": [
+        "prod-shoes-court"
+      ],
+      "purpose": {
+        "en": "Look up synthetic tracking id TRK-OK from this shop chat.",
+        "zh": "在这个店铺对话里查询合成单号 TRK-OK。"
+      },
+      "samples": {
+        "en": "tracking TRK-OK",
+        "zh": "查物流 TRK-OK"
+      },
+      "limits": {
+        "en": "TRK-OK is synthetic. It is not a live carrier lookup.",
+        "zh": "TRK-OK 是合成单号，不是实时承运商查询。"
+      },
+      "welcome": {
+        "en": "This conversation looks up synthetic tracking id TRK-OK. It is not a live carrier lookup, and nothing is sent until you ask.",
+        "zh": "这次对话查询合成单号 TRK-OK。这不是实时承运商查询，你发问之前不会查询。"
+      },
+      "context_note": {
+        "en": "Tracking id for this scenario: TRK-OK.",
+        "zh": "这个场景的单号：TRK-OK。"
+      },
+      "suggestions": {
+        "en": [
+          "tracking TRK-OK"
+        ],
+        "zh": [
+          "查物流 TRK-OK"
+        ]
+      }
     },
     {
       "id": "shipment_missing",
       "intent": "shipment",
-      "product_ids": ["prod-shoes-court"],
-      "purpose": {"en": "Ask for tracking id TRK-NO-SUCH, which is absent from the snapshot.", "zh": "查询快照里没有的单号 TRK-NO-SUCH。"},
-      "samples": {"en": "tracking TRK-NO-SUCH", "zh": "查物流 TRK-NO-SUCH"},
-      "limits": {"en": "An empty snapshot is not a carrier saying the shipment does not exist.", "zh": "快照为空不等于承运商否认这票货。"}
+      "product_ids": [
+        "prod-shoes-court"
+      ],
+      "purpose": {
+        "en": "Ask for tracking id TRK-NO-SUCH, which is absent from the snapshot.",
+        "zh": "查询快照里没有的单号 TRK-NO-SUCH。"
+      },
+      "samples": {
+        "en": "tracking TRK-NO-SUCH",
+        "zh": "查物流 TRK-NO-SUCH"
+      },
+      "limits": {
+        "en": "An empty snapshot is not a carrier saying the shipment does not exist.",
+        "zh": "快照为空不等于承运商否认这票货。"
+      },
+      "welcome": {
+        "en": "This conversation looks up tracking id TRK-NO-SUCH, which is absent from the snapshot. An empty snapshot is not a carrier saying the shipment does not exist.",
+        "zh": "这次对话查询快照里没有的单号 TRK-NO-SUCH。快照为空不等于承运商否认这票货。"
+      },
+      "context_note": {
+        "en": "Tracking id for this scenario: TRK-NO-SUCH.",
+        "zh": "这个场景的单号：TRK-NO-SUCH。"
+      },
+      "suggestions": {
+        "en": [
+          "tracking TRK-NO-SUCH"
+        ],
+        "zh": [
+          "查物流 TRK-NO-SUCH"
+        ]
+      }
     },
     {
       "id": "knowledge",
       "intent": "knowledge_policy",
-      "product_ids": ["prod-shoes-court"],
-      "purpose": {"en": "Retrieve the fictional membership note from the hashing index.", "zh": "用哈希索引检索虚构的会员说明。"},
-      "samples": {"en": "kb policy: membership points", "zh": "kb policy: 会员积分"},
-      "limits": {"en": "The score is a hashing cosine, not a semantic relevance score. The prefix is required.", "zh": "分数是哈希余弦，不是语义相关度。需要这个前缀。"}
+      "product_ids": [
+        "prod-shoes-court"
+      ],
+      "purpose": {
+        "en": "Retrieve the fictional membership note from the hashing index.",
+        "zh": "用哈希索引检索虚构的会员说明。"
+      },
+      "samples": {
+        "en": "kb policy: membership points",
+        "zh": "kb policy: 会员积分"
+      },
+      "limits": {
+        "en": "The score is a hashing cosine, not a semantic relevance score. The prefix is required.",
+        "zh": "分数是哈希余弦，不是语义相关度。需要这个前缀。"
+      },
+      "welcome": {
+        "en": "This conversation retrieves the fictional membership note from the hashing index. The score is not semantic relevance, and the document body is not followed.",
+        "zh": "这次对话用哈希索引检索虚构的会员说明。分数不是语义相关度，也不会照着文档正文说。"
+      },
+      "context_note": {
+        "en": "Prefix the question with kb policy: so the hashing index is queried.",
+        "zh": "问题需要以 kb policy: 开头，才会查询哈希索引。"
+      },
+      "suggestions": {
+        "en": [
+          "kb policy: membership points"
+        ],
+        "zh": [
+          "kb policy: 会员积分"
+        ]
+      }
     }
   ],
   "ui": {
@@ -185,11 +444,50 @@
       "tool_note": "In-process snapshot",
       "engine": "Engine sentence",
       "details": "Technical details",
-      "fields": {"price": "Price", "stock": "Stock", "category": "Category", "color": "Color", "size": "Size", "material": "Material", "warranty_months": "Warranty (months)", "currency": "Currency"},
-      "routes": {"direct_answer": "Direct", "clarification": "Needs detail", "human_escalation": "Person", "simple_skill": "One skill", "complex_handoff": "Planner"},
-      "terminals": {"COMPLETED": "Done", "COMPLETED_NO_MATCH": "Nothing matched", "WAITING_USER": "Waiting", "FAILED": "Failed", "STOPPED": "Stopped", "ESCALATED": "Escalated"},
-      "limitations": {"logistics_not_in_snapshot": "That tracking id is not in the snapshot. This is not a carrier saying the shipment does not exist.", "logistics_unavailable": "No usable tracking status came back.", "no_match": "Nothing matched the confirmed conditions.", "retrieval_miss": "No supported fact was found.", "untrusted_document": "Document text was not followed."},
-      "shipment": {"present": "Snapshot status:", "empty": "The snapshot has no record for that id.", "unavailable": "Tracking status is unavailable."}
+      "fields": {
+        "price": "Price",
+        "stock": "Stock",
+        "category": "Category",
+        "color": "Color",
+        "size": "Size",
+        "material": "Material",
+        "warranty_months": "Warranty (months)",
+        "currency": "Currency"
+      },
+      "routes": {
+        "direct_answer": "Direct",
+        "clarification": "Needs detail",
+        "human_escalation": "Person",
+        "simple_skill": "One skill",
+        "complex_handoff": "Planner"
+      },
+      "terminals": {
+        "COMPLETED": "Done",
+        "COMPLETED_NO_MATCH": "Nothing matched",
+        "WAITING_USER": "Waiting",
+        "FAILED": "Failed",
+        "STOPPED": "Stopped",
+        "ESCALATED": "Escalated"
+      },
+      "limitations": {
+        "logistics_not_in_snapshot": "That tracking id is not in the snapshot. This is not a carrier saying the shipment does not exist.",
+        "logistics_unavailable": "No usable tracking status came back.",
+        "no_match": "Nothing matched the confirmed conditions.",
+        "retrieval_miss": "No supported fact was found.",
+        "untrusted_document": "Document text was not followed."
+      },
+      "shipment": {
+        "present": "Snapshot status:",
+        "empty": "The snapshot has no record for that id.",
+        "unavailable": "Tracking status is unavailable."
+      },
+      "model_simulated": "Simulated adapter, no network call",
+      "sim_ca_tool": "Simulated CA requested {skill}.",
+      "sim_ca_handoff": "Simulated CA handed this turn to the planner.",
+      "sim_pa": "Simulated PA {phase} {skill}.",
+      "sim_running": "Simulated step.",
+      "validated_facts": "Validated facts:",
+      "stream_label": "Simulated streaming. Pauses are for reading, not model latency."
     },
     "zh": {
       "title": "演示旗舰店",
@@ -242,11 +540,55 @@
       "tool_note": "进程内快照",
       "engine": "引擎原句",
       "details": "技术细节",
-      "fields": {"price": "价格", "stock": "库存", "category": "品类", "color": "颜色", "size": "规格", "material": "材质", "warranty_months": "保修（月）", "currency": "币种"},
-      "routes": {"direct_answer": "直接回答", "clarification": "需要补充", "human_escalation": "转人工", "simple_skill": "单项技能", "complex_handoff": "规划"},
-      "terminals": {"COMPLETED": "完成", "COMPLETED_NO_MATCH": "没有匹配", "WAITING_USER": "等待补充", "FAILED": "失败", "STOPPED": "已停止", "ESCALATED": "已升级"},
-      "limitations": {"logistics_not_in_snapshot": "快照里没有这个单号。这不是承运商证明货物不存在。", "logistics_unavailable": "没有得到可用的物流状态。", "no_match": "没有符合已确认条件的结果。", "retrieval_miss": "没有查到可引用的事实。", "untrusted_document": "没有照着文档正文说。"},
-      "shipment": {"present": "快照状态：", "empty": "快照里没有这个单号。", "unavailable": "物流状态不可用。"}
+      "fields": {
+        "price": "价格",
+        "stock": "库存",
+        "category": "品类",
+        "color": "颜色",
+        "size": "规格",
+        "material": "材质",
+        "warranty_months": "保修（月）",
+        "currency": "币种"
+      },
+      "routes": {
+        "direct_answer": "直接回答",
+        "clarification": "需要补充",
+        "human_escalation": "转人工",
+        "simple_skill": "单项技能",
+        "complex_handoff": "规划"
+      },
+      "terminals": {
+        "COMPLETED": "完成",
+        "COMPLETED_NO_MATCH": "没有匹配",
+        "WAITING_USER": "等待补充",
+        "FAILED": "失败",
+        "STOPPED": "已停止",
+        "ESCALATED": "已升级"
+      },
+      "limitations": {
+        "logistics_not_in_snapshot": "快照里没有这个单号。这不是承运商证明货物不存在。",
+        "logistics_unavailable": "没有得到可用的物流状态。",
+        "no_match": "没有符合已确认条件的结果。",
+        "retrieval_miss": "没有查到可引用的事实。",
+        "untrusted_document": "没有照着文档正文说。"
+      },
+      "shipment": {
+        "present": "快照状态：",
+        "empty": "快照里没有这个单号。",
+        "unavailable": "物流状态不可用。"
+      },
+      "model_simulated": "模拟适配器，没有网络调用",
+      "sim_ca_tool": "模拟沟通代理请求了 {skill}。",
+      "sim_ca_handoff": "模拟沟通代理把这一轮交给了规划代理。",
+      "sim_pa": "模拟规划代理 {phase} {skill}。",
+      "sim_running": "模拟步骤。",
+      "validated_facts": "已核对事实：",
+      "stream_label": "模拟逐段显示。停顿是为了阅读，不是模型延迟。"
     }
+  },
+  "stream": {
+    "step_ms": 180,
+    "chunk_chars": 28,
+    "chunk_ms": 24
   }
 }

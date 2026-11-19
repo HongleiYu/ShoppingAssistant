@@ -156,8 +156,51 @@ class ProductEntryTest(unittest.TestCase):
             self.assertEqual(asked_shoes["consulted_product_id"], "prod-shoes-court")
             self.assertEqual(asked_shoes["cards"][0]["fields"]["price"], 48)
             self.assertEqual(asked_shoes["cards"][0]["fields"]["stock"], 16)
+            self.assertEqual(asked_shoes["display_cards"], [])
+            phases = [(item["agent"], item["phase"]) for item in asked_shoes["model_invocations"]]
+            self.assertEqual(phases[0], ("ca", "route"))
+            self.assertEqual(phases[-1], ("ca", "answer"))
+            self.assertEqual(asked_shoes["model_invocations"][0]["output"]["skill_id"], "product_quote")
+            self.assertTrue(all(item["simulated"] and item["network"] is False for item in asked_shoes["model_invocations"]))
+            self.assertFalse(asked_shoes["model_called"])
+            self.assertTrue(asked_shoes["presentation"])
+            self.assertTrue(any(step.get("kind") == "grounded" for step in asked_shoes["presentation"]))
+            blue = app.turn("How much is the Blue stoneware mug 350 ml?")
+            self.assertEqual([card["product_id"] for card in blue["display_cards"]], ["prod-mug-blue"])
+            again = app.turn("How much is this item?")
+            self.assertEqual(again["consulted_product_id"], "prod-mug-blue")
+            self.assertEqual(again["display_cards"], [])
+            search = app.turn("find drinkware under 20")
+            self.assertEqual(search["model_invocations"][0]["output"]["route"], "complex_handoff")
+            self.assertTrue(any(item["agent"] == "pa" and item["phase"] == "plan" for item in search["model_invocations"]))
+            self.assertEqual(search["model_invocations"][-1]["phase"], "answer")
+            self.assertEqual(
+                [card["product_id"] for card in search["display_cards"]],
+                ["prod-btl-steel", "prod-mug-blue", "prod-mug-sand"],
+            )
+            compared = app.turn("compare Matte ceramic mug 350 ml and Blue stoneware mug 350 ml")
+            self.assertEqual(
+                [card["product_id"] for card in compared["display_cards"]],
+                ["prod-mug-blue", "prod-mug-sand"],
+            )
         finally:
             app.close()
+
+    def test_scenario_copy_and_suggestions_differ(self):
+        config = json.loads((ROOT / "shopassist" / "pages" / "demo_config.json").read_text(encoding="utf-8"))
+        welcomes = [scenario["welcome"]["en"] for scenario in config["scenarios"]]
+        self.assertEqual(len(welcomes), len(set(welcomes)))
+        suggestions = [tuple(scenario["suggestions"]["en"]) for scenario in config["scenarios"]]
+        self.assertEqual(len(suggestions), len(set(suggestions)))
+        self.assertNotEqual(
+            next(item for item in config["scenarios"] if item["id"] == "shipment_known")["context_note"]["en"],
+            next(item for item in config["scenarios"] if item["id"] == "shipment_missing")["context_note"]["en"],
+        )
+        for scenario in config["scenarios"]:
+            for locale, lines in scenario["suggestions"].items():
+                for line in lines:
+                    self.assertNotEqual(detect_intent(line), "unknown", line)
+            self.assertEqual(len(scenario["suggestions"]["en"]), len(set(scenario["suggestions"]["en"])))
 
 
 if __name__ == "__main__":
