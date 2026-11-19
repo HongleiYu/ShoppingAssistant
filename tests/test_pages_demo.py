@@ -28,8 +28,16 @@ TURNS = (
 class PagesProjectionTest(unittest.TestCase):
     def test_prompts_match_the_parser(self):
         config = json.loads((ROOT / "shopassist" / "pages" / "demo_config.json").read_text(encoding="utf-8"))
-        for prompt in config["prompts"]:
-            self.assertEqual(detect_intent(prompt["text"]), prompt["intent"])
+        for locale, prompts in config["prompts"].items():
+            for prompt in prompts:
+                self.assertEqual(detect_intent(prompt["text"]), prompt["intent"], locale)
+        guided = []
+        for scenario in config["scenarios"]:
+            for locale, text in scenario["samples"].items():
+                self.assertEqual(detect_intent(text), scenario["intent"], text)
+            if scenario["id"] in config["guided"]["step_ids"]:
+                guided.append(scenario["id"])
+        self.assertEqual(guided, config["guided"]["step_ids"])
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
         for item in config["differences"]:
             self.assertIn(item["en"], readme)
@@ -79,6 +87,36 @@ class PagesProjectionTest(unittest.TestCase):
             self.assertTrue((output / ".nojekyll").is_file())
         finally:
             shutil.rmtree(output, ignore_errors=True)
+
+
+class ProductEntryTest(unittest.TestCase):
+    def test_consult_follow_up_switch_and_unknown(self):
+        app = DemoApp()
+        try:
+            sand = app.consult("prod-mug-sand")
+            self.assertTrue(sand["ok"])
+            self.assertEqual(sand["card"]["fields"]["price"], 12)
+            self.assertEqual(sand["card"]["fields"]["stock"], 20)
+            self.assertNotIn("price", sand["tool"]["arguments"])
+            asked = app.turn("这个商品多少钱？")
+            self.assertEqual(asked["consulted_product_id"], "prod-mug-sand")
+            self.assertEqual(asked["cards"][0]["fields"]["price"], 12)
+            stock = app.turn("Is this item in stock?")
+            self.assertEqual(stock["cards"][0]["fields"]["stock"], 20)
+            blue = app.turn("How much is the Blue stoneware mug 350 ml?")
+            self.assertEqual(blue["consulted_product_id"], "prod-mug-blue")
+            again = app.turn("这个商品多少钱？")
+            self.assertEqual(again["cards"][0]["fields"]["price"], 14)
+            self.assertNotEqual(again["cards"][0]["product_id"], "prod-mug-sand")
+            returns = app.turn("退货时限是多久？")
+            self.assertIn({"field": "window_days", "value": 30, "product_id": None, "doc_id": "kb-returns-v3"}, returns["facts"])
+            fresh = app.reset("prod-mug-sand")
+            self.assertEqual(fresh["consult"]["card"]["product_id"], "prod-mug-sand")
+            self.assertEqual(app.turn("How much is this item?")["cards"][0]["fields"]["price"], 12)
+            self.assertFalse(app.consult("prod-not-real")["ok"])
+            self.assertFalse(app.consult("../secret")["ok"])
+        finally:
+            app.close()
 
 
 if __name__ == "__main__":

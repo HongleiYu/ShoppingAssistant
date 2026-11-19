@@ -25,9 +25,13 @@ json.dumps(APP.turn(user_text, on_progress=_hook), ensure_ascii=False)
       post({ type: "result", id: message.id, turn: JSON.parse(raw) });
       return;
     }
-    if (message.type === "reset") {
-      const raw = pyodide.runPython("import json\njson.dumps(APP.reset(), ensure_ascii=False)");
-      post({ type: "reset", id: message.id, meta: JSON.parse(raw) });
+    if (message.type === "consult" || message.type === "reset") {
+      pyodide.globals.set("product_id", message.product_id || "");
+      const source = message.type === "consult"
+        ? "import json\njson.dumps(APP.consult(product_id), ensure_ascii=False)"
+        : "import json\njson.dumps(APP.reset(product_id or None), ensure_ascii=False)";
+      const raw = pyodide.runPython(source);
+      post({ type: message.type, id: message.id, payload: JSON.parse(raw) });
       return;
     }
     if (message.type === "catalog") {

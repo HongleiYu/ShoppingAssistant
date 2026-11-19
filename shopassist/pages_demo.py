@@ -7,6 +7,7 @@ tracking facts, or planner steps that the runtime did not record.
 from __future__ import annotations
 
 import json
+import re
 import time
 import uuid
 from pathlib import Path
@@ -20,13 +21,18 @@ from shopassist.versioning import BANNED_TRACE_KEYS
 
 CONFIG_PATH = Path(__file__).resolve().parent / "pages" / "demo_config.json"
 _PREVIEW_LIMIT = 160
+_PRODUCT_ID = re.compile(r"(?:prod-[a-z0-9-]+|syn-p-[0-9]+)\Z")
 
 
 def load_demo_config() -> dict:
     data = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
     if not isinstance(data, dict):
         raise ValueError("demo_config_not_object")
-    if not isinstance(data.get("prompts"), list) or not data.get("max_message_chars"):
+    prompts = data.get("prompts")
+    guided = data.get("guided") or {}
+    if not isinstance(prompts, dict) or "en" not in prompts or "zh" not in prompts:
+        raise ValueError("demo_config_missing_fields")
+    if not data.get("max_message_chars") or not guided.get("step_ids") or not data.get("scenarios"):
         raise ValueError("demo_config_missing_fields")
     return data
 
@@ -100,6 +106,17 @@ def project_turn(turn: dict, *, request_id: str, duration_ms: float) -> dict:
         "evidence_gate": turn.get("evidence_gate") or {"allowed_count": 0, "blocked": []},
         "cards": _cards(turn),
         "shipment": _shipment(turn),
+        "facts": [
+            {
+                "field": claim.get("field"),
+                "value": claim.get("value"),
+                "product_id": claim.get("product_id"),
+                "doc_id": claim.get("doc_id"),
+            }
+            for claim in turn.get("claims") or []
+            if claim.get("field")
+        ],
+        "consulted_product_id": (turn.get("memory") or {}).get("consulted_product_id"),
         "constraints": constraints,
         "context": {
             "store_kind": context.get("store_kind"),
@@ -196,9 +213,52 @@ class DemoApp:
         duration_ms = (time.perf_counter() - started) * 1000
         return project_turn(turn, request_id=request_id, duration_ms=duration_ms)
 
-    def reset(self) -> dict:
+    def consult(self, product_id: str) -> dict:
+        if not isinstance(product_id, str) or not _PRODUCT_ID.fullmatch(product_id):
+            return {"ok": False, "error": "unknown_product", "product_id": product_id if isinstance(product_id, str) else ""}
+        result = self._session.sandbox.invoke("product_quote", {"product_id": product_id, "fresh": False})
+        items = [
+            item
+            for item in result.get("items") or []
+            if item.get("price_supported") is True and item.get("freshness") == "current" and item.get("product_id") == product_id
+        ]
+        if result.get("status") != "ok" or not items:
+            return {"ok": False, "error": "unknown_product", "product_id": product_id}
+        item = items[0]
+        self._session.memory["consulted_product_id"] = item["product_id"]
+        card = {
+            "product_id": item["product_id"],
+            "name": item.get("name"),
+            "currency": item.get("currency"),
+            "fields": {
+                key: item.get(key)
+                for key in ("price", "stock", "category", "color", "size", "material", "warranty_months")
+                if key in item
+            },
+            "name_source": "synthetic_catalog_snapshot",
+            "evidence_id": (item.get("evidence_ids") or [None])[0],
+        }
+        payload = {
+            "ok": True,
+            "product_id": item["product_id"],
+            "card": card,
+            "tool": {
+                "tool": "product_quote",
+                "status": result.get("status"),
+                "transport": "in_process",
+                "data_source": "synthetic_snapshot",
+                "arguments": {"product_id": product_id, "fresh": False},
+            },
+        }
+        cleaned, _count = scrub_object(payload)
+        return cleaned
+
+    def reset(self, product_id: str | None = None) -> dict:
         self._session.reset()
-        return self.meta()
+        payload = {"ok": True, "meta": self.meta()}
+        if product_id:
+            payload["consult"] = self.consult(product_id)
+        return payload
 
     def close(self) -> None:
         sandbox = getattr(self._session, "sandbox", None)

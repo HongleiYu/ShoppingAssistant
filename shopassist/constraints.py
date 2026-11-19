@@ -40,6 +40,7 @@ def empty_memory() -> dict:
         "contradictions": [],
         "task_summaries": [],
         "active_task_id": None,
+        "consulted_product_id": None,
     }
 
 

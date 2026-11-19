@@ -94,7 +94,12 @@ def decide_route(features: dict, memory: dict) -> dict:
             skill_args={"tracking_id": features["tracking_id"]},
         )
     if intent == "quote":
-        if len(features.get("product_ids") or []) != 1:
+        product_ids = list(features.get("product_ids") or [])
+        if not product_ids and features.get("use_current_product"):
+            current = memory.get("consulted_product_id")
+            if current:
+                product_ids = [current]
+        if len(product_ids) != 1:
             return _decision("clarification", "missing_information", intent, True, missing=["product"])
         return _decision(
             "simple_skill",
@@ -102,7 +107,7 @@ def decide_route(features: dict, memory: dict) -> dict:
             intent,
             True,
             skill_id="product_quote",
-            skill_args={"product_id": features["product_ids"][0], "fresh": False},
+            skill_args={"product_id": product_ids[0], "fresh": False},
         )
     if intent in HANDOFF_INTENTS:
         missing = _missing_slots(intent, features, memory)

@@ -1,13 +1,10 @@
 {
-  "brand": "澄选",
-  "title": "购物助手演示",
-  "subtitle": "合成目录上的对话。浏览器里实际跑一轮，再给出这一轮的调用链路。",
-  "banner": "这是浏览器里的确定性演示，使用合成目录。不会下单，也不会连接模型或承运商。",
-  "input_note": "解析器只识别固定的英文句式。下面的中文是说明，发送的是英文原句。",
+  "brand": "Northline",
+  "brand_zh": "澄选",
+  "default_locale": "en",
+  "default_product_id": "prod-mug-sand",
+  "locale_storage_key": "northline-demo-locale",
   "max_message_chars": 2000,
-  "composer_placeholder": "输入支持的英文句式，例如 find drinkware under 20",
-  "empty_title": "从左侧选一个场景，或自己输入原句",
-  "empty_body": "运行时加载完成后即可发送。回复、商品卡片和右侧链路都来自这一轮真正执行的结果。",
   "differences": [
     {
       "en": "This page runs the mock communication agent, planner, skills, and evidence gate inside the browser. It does not call a chat-completions model.",
@@ -30,8 +27,8 @@
       "zh": "页面使用内置默认设置，忽略 SHOPASSIST 环境变量和本地设置文件。本地服务仍会读取它们。"
     },
     {
-      "en": "The parser matches the English sentence patterns in shopassist.parsing. The quick prompts are those sentences. A Chinese label only describes them.",
-      "zh": "解析器识别 shopassist.parsing 里的英文句式。快捷输入是这些原句。中文只是说明。"
+      "en": "The page sends the sentence shown on each shortcut. Chinese questions such as 这个商品多少钱 are parsed directly. Catalog category ids such as drinkware stay in English.",
+      "zh": "快捷按钮发送的就是按钮上的那句话。这个商品多少钱这类中文问题会直接解析。目录里的品类 id 如 drinkware 仍是英文。"
     },
     {
       "en": "Nothing here places an order or takes payment. Shipment answers describe the synthetic snapshot only.",
@@ -42,100 +39,220 @@
       "zh": "本页的知识检索使用随静态文件发布的哈希词面索引。它不是语义向量，也不是在线向量库或 MCP 进程。"
     }
   ],
-  "prompts": [
+  "prompts": {
+    "en": [
+      {"id": "price", "text": "How much is this item?", "intent": "quote"},
+      {"id": "stock", "text": "Is this item in stock?", "intent": "quote"},
+      {"id": "returns", "text": "What is the return window?", "intent": "policy_returns"},
+      {"id": "other", "text": "How much is the Blue stoneware mug 350 ml?", "intent": "quote"}
+    ],
+    "zh": [
+      {"id": "price", "text": "这个商品多少钱？", "intent": "quote"},
+      {"id": "stock", "text": "这个商品有货吗？", "intent": "quote"},
+      {"id": "returns", "text": "退货时限是多久？", "intent": "policy_returns"},
+      {"id": "other", "text": "Blue stoneware mug 350 ml 多少钱？", "intent": "quote"}
+    ]
+  },
+  "scenarios": [
     {
-      "id": "search",
-      "label": "按预算找杯子",
-      "detail": "检索 drinkware，预算低于 20",
-      "text": "find drinkware under 20",
-      "intent": "search"
+      "id": "consult_price",
+      "intent": "quote",
+      "purpose": {"en": "Price and stock for the item opened from the product page.", "zh": "核对从商品页带进来的这件商品的价格和库存。"},
+      "samples": {"en": "How much is this item?", "zh": "这个商品多少钱？"},
+      "limits": {"en": "Uses the consulted product in the session. The snapshot name stays English.", "zh": "用会话里正在看的商品。快照里的商品名仍是英文。"}
     },
     {
-      "id": "budget",
-      "label": "把预算改成 13",
-      "detail": "沿用已确认的品类，只改预算",
-      "text": "change the budget to 13",
-      "intent": "change_budget"
+      "id": "consult_stock",
+      "intent": "quote",
+      "purpose": {"en": "Ask whether that same item is in stock.", "zh": "询问同一件商品是否有货。"},
+      "samples": {"en": "Is this item in stock?", "zh": "这个商品有货吗？"},
+      "limits": {"en": "Stock comes from the quote, not from the page address.", "zh": "库存来自报价，不来自网址。"}
+    },
+    {
+      "id": "search_budget",
+      "intent": "search",
+      "purpose": {"en": "Search the drinkware category under a budget.", "zh": "在预算内检索 drinkware。"},
+      "samples": {"en": "find drinkware under 20", "zh": "找 drinkware，20以内"},
+      "limits": {"en": "The category id drinkware is English in the snapshot.", "zh": "品类 id drinkware 在快照里是英文。"}
     },
     {
       "id": "compare",
-      "label": "对比两只杯子",
-      "detail": "比较目录里的两件商品",
-      "text": "compare Matte ceramic mug 350 ml and Blue stoneware mug 350 ml",
-      "intent": "compare"
+      "intent": "compare",
+      "purpose": {"en": "Compare two named catalog items.", "zh": "对比两件点名的商品。"},
+      "samples": {"en": "compare Matte ceramic mug 350 ml and Blue stoneware mug 350 ml", "zh": "对比 Matte ceramic mug 350 ml 和 Blue stoneware mug 350 ml"},
+      "limits": {"en": "Both names must be the snapshot names.", "zh": "两个名字都必须是快照里的英文名。"}
     },
     {
-      "id": "ship-ok",
-      "label": "查已知物流",
-      "detail": "合成快照里存在的单号",
-      "text": "tracking TRK-OK",
-      "intent": "shipment"
+      "id": "returns",
+      "intent": "policy_returns",
+      "purpose": {"en": "Read the current return window from the fixture policy.", "zh": "读取夹具政策里的现行退货时限。"},
+      "samples": {"en": "What is the return window?", "zh": "退货时限是多久？"},
+      "limits": {"en": "This is the shared fixture note, not a promise from a carrier or a per-item rule.", "zh": "这是共享的夹具说明，不是承运商承诺，也不是单件商品规则。"}
     },
     {
-      "id": "ship-missing",
-      "label": "查没有的单号",
-      "detail": "快照中不存在，不等于承运商否认",
-      "text": "tracking TRK-NO-SUCH",
-      "intent": "shipment"
+      "id": "shipment_known",
+      "intent": "shipment",
+      "purpose": {"en": "Read a known synthetic tracking id.", "zh": "查询合成快照里存在的单号。"},
+      "samples": {"en": "tracking TRK-OK", "zh": "查物流 TRK-OK"},
+      "limits": {"en": "TRK-OK is synthetic. It is not a live carrier lookup.", "zh": "TRK-OK 是合成单号，不是实时承运商查询。"}
     },
     {
-      "id": "policy",
-      "label": "退货时限",
-      "detail": "查小型夹具知识库里的现行退货说明",
-      "text": "return window",
-      "intent": "policy_returns"
+      "id": "shipment_missing",
+      "intent": "shipment",
+      "purpose": {"en": "Ask for a tracking id that is absent from the snapshot.", "zh": "查询快照里没有的单号。"},
+      "samples": {"en": "tracking TRK-NO-SUCH", "zh": "查物流 TRK-NO-SUCH"},
+      "limits": {"en": "An empty snapshot is not a carrier saying the shipment does not exist.", "zh": "快照为空不等于承运商否认这票货。"}
     },
     {
-      "id": "kb-policy",
-      "label": "查会员积分",
-      "detail": "前缀是英文，后面可以是中文。哈希检索，不是语义模型",
-      "text": "kb policy: 会员积分",
-      "intent": "knowledge_policy"
-    },
-    {
-      "id": "kb-product",
-      "label": "查演示商品",
-      "detail": "先检索，再核对虚构目录里的价格和库存",
-      "text": "kb product: harbor linen napkin",
-      "intent": "knowledge_product"
+      "id": "knowledge",
+      "intent": "knowledge_policy",
+      "purpose": {"en": "Retrieve a fictional membership note from the hashing index.", "zh": "用哈希索引检索虚构的会员说明。"},
+      "samples": {"en": "kb policy: membership points", "zh": "kb policy: 会员积分"},
+      "limits": {"en": "The score is a hashing cosine, not a semantic relevance score. The prefix is required.", "zh": "分数是哈希余弦，不是语义相关度。需要这个前缀。"}
     }
   ],
-  "routes": {
-    "direct_answer": "直接回答",
-    "clarification": "需要补充",
-    "human_escalation": "转人工",
-    "simple_skill": "简单技能",
-    "complex_handoff": "交给规划代理"
+  "guided": {
+    "autoplay": "first_session",
+    "pace_ms": 1600,
+    "seen_key": "northline-demo-guided",
+    "step_ids": ["consult_price", "search_budget", "returns"]
   },
-  "terminals": {
-    "COMPLETED": "完成",
-    "COMPLETED_NO_MATCH": "查完，没有匹配",
-    "WAITING_USER": "等待补充",
-    "FAILED": "失败",
-    "STOPPED": "已停止",
-    "ESCALATED": "已升级"
-  },
-  "fields": {
-    "price": "价格",
-    "stock": "库存",
-    "category": "品类",
-    "color": "颜色",
-    "size": "规格",
-    "material": "材质",
-    "warranty_months": "保修（月）",
-    "currency": "币种"
-  },
-  "limitation_notes": {
-    "logistics_not_in_snapshot": "合成快照里没有这个单号。这不是承运商证明货物不存在。",
-    "logistics_unavailable": "这次没有得到可用的物流状态。不能据此说没有记录。",
-    "logistics_not_queried": "这一轮没有查询物流。",
-    "no_match": "合成目录里没有同时满足已确认条件的商品。",
-    "dynamic_unverified": "动态价格或库存没有被当作当前值。",
-    "fact_not_in_evidence": "有说法没有对应证据，证据门已拦住。"
-  },
-  "shipment_notes": {
-    "present": "以下状态来自合成快照里核对过的字段。",
-    "empty": "快照没有这条记录。页面没有把它说成承运商的否定结论。",
-    "unavailable": "查询没有返回可用状态。"
+  "ui": {
+    "en": {
+      "title": "Northline demo",
+      "banner": "Deterministic demo · synthetic catalog · no checkout",
+      "guest": "Demo guest",
+      "language": "Language",
+      "trace": "Trace",
+      "close_trace": "Close",
+      "reset": "New chat",
+      "send": "Send",
+      "cancel": "Cancel",
+      "message_label": "Message",
+      "placeholder": "Ask about this item",
+      "shortcuts": "Shortcuts",
+      "consulting": "Viewing",
+      "welcome": "Hello. You opened this chat from the product page. I can check this item's price and stock, and the return note, using the synthetic catalog.",
+      "guided": "Guided demo",
+      "fictional_user": "Fictional shopper",
+      "skip": "Skip",
+      "replay": "Replay",
+      "own_chat": "Start your own chat",
+      "pace_note": "Pauses are only for reading. The time on a turn is the measured run, not the pause.",
+      "scenarios": "Supported scenarios",
+      "close_scenarios": "Close",
+      "use_example": "Put this in the box",
+      "send_example": "Send this example",
+      "scenario_limits": "Limits",
+      "no_checkout": "This demo cannot place an order.",
+      "ready": "Ready.",
+      "working": "Working on this message.",
+      "done": "Done.",
+      "boot_pyodide": "Loading the local runtime.",
+      "boot_sqlite": "Loading the local catalog store.",
+      "boot_runtime": "Loading the catalog snapshot.",
+      "cancelled": "This result was discarded.",
+      "reset_done": "Chat reset. You are back on the item you opened.",
+      "unknown_product": "That product id is not in the snapshot. No price or stock is shown.",
+      "runtime_error": "This turn did not finish.",
+      "empty_message": "Type a question first.",
+      "message_too_long": "That message is too long.",
+      "unsupported": "I can answer price, stock, and the return window for the item you are viewing. Other questions need one of the supported sentences.",
+      "price_line": "This item is {price} {currency}, with {stock} in stock.",
+      "returns_line": "The current return window is {days} days for unused items.",
+      "no_match": "Nothing in the snapshot matches that request.",
+      "several": "These items matched. Prices and stock are from the snapshot.",
+      "trace_title": "This turn",
+      "trace_empty": "Open this after a question to see the route, skill, and evidence gate.",
+      "request": "Request",
+      "duration": "Time",
+      "duration_suffix": "ms, user_message only",
+      "route": "Route",
+      "planner": "Planner",
+      "planner_yes": "Used",
+      "planner_no": "Not used",
+      "terminal": "Result",
+      "model": "Model",
+      "model_no": "Not called",
+      "gate": "Evidence gate",
+      "gate_line": "{allowed} allowed, {blocked} blocked",
+      "skill": "Skill",
+      "tool_note": "In-process snapshot",
+      "engine": "Engine sentence",
+      "details": "Technical details",
+      "fields": {"price": "Price", "stock": "Stock", "category": "Category", "color": "Color", "size": "Size", "material": "Material", "warranty_months": "Warranty (months)", "currency": "Currency"},
+      "routes": {"direct_answer": "Direct", "clarification": "Needs detail", "human_escalation": "Person", "simple_skill": "One skill", "complex_handoff": "Planner"},
+      "terminals": {"COMPLETED": "Done", "COMPLETED_NO_MATCH": "Nothing matched", "WAITING_USER": "Waiting", "FAILED": "Failed", "STOPPED": "Stopped", "ESCALATED": "Escalated"},
+      "limitations": {"logistics_not_in_snapshot": "That tracking id is not in the snapshot. This is not a carrier saying the shipment does not exist.", "logistics_unavailable": "No usable tracking status came back.", "no_match": "Nothing matched the confirmed conditions.", "retrieval_miss": "No supported fact was found.", "untrusted_document": "Document text was not followed."},
+      "shipment": {"present": "Status below is from the synthetic snapshot.", "empty": "The snapshot has no record for that id.", "unavailable": "Tracking status is unavailable."}
+    },
+    "zh": {
+      "title": "澄选演示",
+      "banner": "确定性演示 · 合成目录 · 不能下单",
+      "guest": "演示顾客",
+      "language": "语言",
+      "trace": "链路",
+      "close_trace": "关闭",
+      "reset": "新对话",
+      "send": "发送",
+      "cancel": "取消",
+      "message_label": "消息",
+      "placeholder": "问问这件商品",
+      "shortcuts": "快捷问题",
+      "consulting": "正在看",
+      "welcome": "你好。你是从商品页进来的。我可以用合成目录核对这件商品的价格、库存和退货说明。",
+      "guided": "自动演示",
+      "fictional_user": "虚构顾客",
+      "skip": "跳过",
+      "replay": "重播",
+      "own_chat": "开始自己的对话",
+      "pace_note": "停顿只是为了阅读。回合上的时间是实际运行时间，不是停顿。",
+      "scenarios": "支持的场景",
+      "close_scenarios": "关闭",
+      "use_example": "填入输入框",
+      "send_example": "发送这句",
+      "scenario_limits": "限制",
+      "no_checkout": "这个演示不能下单。",
+      "ready": "可以发送。",
+      "working": "正在处理这句话。",
+      "done": "这一轮结束了。",
+      "boot_pyodide": "正在加载本地运行时。",
+      "boot_sqlite": "正在加载本地目录存储。",
+      "boot_runtime": "正在加载目录快照。",
+      "cancelled": "这一轮的结果已丢弃。",
+      "reset_done": "对话已重置，回到你进来时的商品。",
+      "unknown_product": "快照里没有这个商品编号，所以不显示价格或库存。",
+      "runtime_error": "这一轮没有完成。",
+      "empty_message": "请先输入问题。",
+      "message_too_long": "这句话太长了。",
+      "unsupported": "我可以回答你正在看的商品的价格、库存和退货时限。其他问题需要用支持的句子。",
+      "price_line": "这件商品是 {price} {currency}，库存 {stock}。",
+      "returns_line": "现行退货时限是 {days} 天，适用于未使用的商品。",
+      "no_match": "快照里没有符合这个请求的结果。",
+      "several": "这些商品符合条件。价格和库存来自快照。",
+      "trace_title": "这一轮",
+      "trace_empty": "提问之后打开这里，可以看到路由、技能和证据门。",
+      "request": "请求编号",
+      "duration": "耗时",
+      "duration_suffix": "毫秒，只计 user_message",
+      "route": "路由",
+      "planner": "规划",
+      "planner_yes": "用了",
+      "planner_no": "没用",
+      "terminal": "结果",
+      "model": "模型",
+      "model_no": "未调用",
+      "gate": "证据门",
+      "gate_line": "通过 {allowed}，拦住 {blocked}",
+      "skill": "技能",
+      "tool_note": "进程内快照",
+      "engine": "引擎原句",
+      "details": "技术细节",
+      "fields": {"price": "价格", "stock": "库存", "category": "品类", "color": "颜色", "size": "规格", "material": "材质", "warranty_months": "保修（月）", "currency": "币种"},
+      "routes": {"direct_answer": "直接回答", "clarification": "需要补充", "human_escalation": "转人工", "simple_skill": "单项技能", "complex_handoff": "规划"},
+      "terminals": {"COMPLETED": "完成", "COMPLETED_NO_MATCH": "没有匹配", "WAITING_USER": "等待补充", "FAILED": "失败", "STOPPED": "已停止", "ESCALATED": "已升级"},
+      "limitations": {"logistics_not_in_snapshot": "快照里没有这个单号。这不是承运商证明货物不存在。", "logistics_unavailable": "没有得到可用的物流状态。", "no_match": "没有符合已确认条件的结果。", "retrieval_miss": "没有查到可引用的事实。", "untrusted_document": "没有照着文档正文说。"},
+      "shipment": {"present": "下面的状态来自合成快照。", "empty": "快照里没有这个单号。", "unavailable": "物流状态不可用。"}
+    }
   }
 }

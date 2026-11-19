@@ -159,7 +159,7 @@ The separate local Python server can use a configured model endpoint. This page 
 
 The page uses the built-in default settings. It ignores SHOPASSIST environment variables and the local settings file. The local server still applies those.
 
-The parser matches the English sentence patterns in shopassist.parsing. The quick prompts are those sentences. A Chinese label only describes them.
+The page sends the sentence shown on each shortcut. Chinese questions such as 这个商品多少钱 are parsed directly. Catalog category ids such as drinkware stay in English.
 
 Nothing here places an order or takes payment. Shipment answers describe the synthetic snapshot only.
 

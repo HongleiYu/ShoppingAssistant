@@ -398,6 +398,10 @@ class AgentSession:
             turn["terminal"] = {"status": "ESCALATED", "reason_code": "conflicting_evidence"}
             return render_escalation("conflicting_evidence")
         if result["status"] == "ok" and result.get("items"):
+            if decision.get("skill_id") == "product_quote" and len(result["items"]) == 1:
+                product_id = result["items"][0].get("product_id")
+                if product_id:
+                    self.memory["consulted_product_id"] = product_id
             turn["terminal"] = {"status": "COMPLETED", "reason_code": "validated_completion"}
             return render_items(result["items"])
         if result["status"] == "stale":
