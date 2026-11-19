@@ -225,6 +225,25 @@ PRODUCTS = [
             "as_of": "synthetic-catalog-v1",
         },
     },
+    {
+        "product_id": "prod-shoes-court",
+        "sku": "SKU-SHOES-COURT",
+        "name": "Canvas court shoes",
+        "currency": "USD",
+        "static_attributes": {
+            "category": "footwear",
+            "color": "sand",
+            "size": "42",
+            "material": "canvas",
+            "warranty_months": 6,
+        },
+        "dynamic": {
+            "price": 48,
+            "stock": 16,
+            "freshness": "current",
+            "as_of": "synthetic-catalog-v1",
+        },
+    },
 ]
 
 DOCUMENTS = [

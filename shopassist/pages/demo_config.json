@@ -1,9 +1,9 @@
 {
-  "brand": "Northline",
-  "brand_zh": "澄选",
+  "brand": "Demo Flagship Store",
+  "brand_zh": "演示旗舰店",
   "default_locale": "en",
-  "default_product_id": "prod-mug-sand",
-  "locale_storage_key": "northline-demo-locale",
+  "default_product_id": "prod-shoes-court",
+  "locale_storage_key": "flagship-demo-locale",
   "max_message_chars": 2000,
   "differences": [
     {
@@ -15,8 +15,8 @@
       "zh": "商品、政策和物流工具在页面进程内读取合成快照。没有 MCP 子进程，也不会访问商店或承运商。"
     },
     {
-      "en": "Session memory uses in-memory SQLite and an in-memory cache. MySQL and Redis are not used. Reset clears them.",
-      "zh": "会话记忆使用内存中的 SQLite 和内存缓存。不使用 MySQL 或 Redis。新对话会清空它们。"
+      "en": "Session memory uses in-memory SQLite and an in-memory cache. MySQL and Redis are not used. Entering a scenario clears them.",
+      "zh": "会话记忆使用内存中的 SQLite 和内存缓存。不使用 MySQL 或 Redis。进入一个场景会清空它们。"
     },
     {
       "en": "The separate local Python server can use a configured model endpoint. This page never contacts that server and has no place to enter an API key.",
@@ -39,6 +39,20 @@
       "zh": "本页的知识检索使用随静态文件发布的哈希词面索引。它不是语义向量，也不是在线向量库或 MCP 进程。"
     }
   ],
+  "images": {
+    "prod-shoes-court": "products/prod-shoes-court.jpg",
+    "prod-mug-sand": "products/prod-mug-sand.jpg",
+    "prod-mug-blue": "products/prod-mug-blue.jpg",
+    "prod-mug-red": "products/prod-mug-red.jpg",
+    "prod-btl-steel": "products/prod-btl-steel.jpg",
+    "prod-btl-large": "products/prod-btl-large.jpg",
+    "prod-tee-navy-m": "products/prod-tee-navy.jpg",
+    "prod-tee-navy-l": "products/prod-tee-navy.jpg",
+    "prod-tee-olive-s": "products/prod-tee-olive.jpg",
+    "prod-lamp": "products/prod-lamp.jpg",
+    "prod-note": "products/prod-note.jpg",
+    "prod-towel": "products/prod-towel.jpg"
+  },
   "prompts": {
     "en": [
       {"id": "price", "text": "How much is this item?", "intent": "quote"},
@@ -57,92 +71,83 @@
     {
       "id": "consult_price",
       "intent": "quote",
-      "purpose": {"en": "Price and stock for the item opened from the product page.", "zh": "核对从商品页带进来的这件商品的价格和库存。"},
+      "product_ids": ["prod-shoes-court"],
+      "purpose": {"en": "Ask the price of the canvas court shoes opened from the product page.", "zh": "询问从商品页带进来的这双帆布鞋的价格。"},
       "samples": {"en": "How much is this item?", "zh": "这个商品多少钱？"},
       "limits": {"en": "Uses the consulted product in the session. The snapshot name stays English.", "zh": "用会话里正在看的商品。快照里的商品名仍是英文。"}
     },
     {
       "id": "consult_stock",
       "intent": "quote",
-      "purpose": {"en": "Ask whether that same item is in stock.", "zh": "询问同一件商品是否有货。"},
+      "product_ids": ["prod-shoes-court"],
+      "purpose": {"en": "Ask whether these canvas court shoes are in stock.", "zh": "询问这双帆布鞋是否有货。"},
       "samples": {"en": "Is this item in stock?", "zh": "这个商品有货吗？"},
       "limits": {"en": "Stock comes from the quote, not from the page address.", "zh": "库存来自报价，不来自网址。"}
     },
     {
       "id": "search_budget",
       "intent": "search",
-      "purpose": {"en": "Search the drinkware category under a budget.", "zh": "在预算内检索 drinkware。"},
+      "product_ids": ["prod-mug-sand", "prod-mug-blue", "prod-btl-steel"],
+      "purpose": {"en": "Search the drinkware category under a budget. These are the in-stock matches under 20.", "zh": "在预算内检索 drinkware。这些是 20 以内且有货的匹配。"},
       "samples": {"en": "find drinkware under 20", "zh": "找 drinkware，20以内"},
       "limits": {"en": "The category id drinkware is English in the snapshot.", "zh": "品类 id drinkware 在快照里是英文。"}
     },
     {
       "id": "compare",
       "intent": "compare",
-      "purpose": {"en": "Compare two named catalog items.", "zh": "对比两件点名的商品。"},
+      "product_ids": ["prod-mug-sand", "prod-mug-blue"],
+      "purpose": {"en": "Compare the matte ceramic mug and the blue stoneware mug.", "zh": "对比哑光陶瓷杯和蓝色炻器杯。"},
       "samples": {"en": "compare Matte ceramic mug 350 ml and Blue stoneware mug 350 ml", "zh": "对比 Matte ceramic mug 350 ml 和 Blue stoneware mug 350 ml"},
       "limits": {"en": "Both names must be the snapshot names.", "zh": "两个名字都必须是快照里的英文名。"}
     },
     {
       "id": "returns",
       "intent": "policy_returns",
-      "purpose": {"en": "Read the current return window from the fixture policy.", "zh": "读取夹具政策里的现行退货时限。"},
+      "product_ids": ["prod-shoes-court"],
+      "purpose": {"en": "Read the current return window while viewing the canvas court shoes.", "zh": "在查看这双帆布鞋时读取现行退货时限。"},
       "samples": {"en": "What is the return window?", "zh": "退货时限是多久？"},
       "limits": {"en": "This is the shared fixture note, not a promise from a carrier or a per-item rule.", "zh": "这是共享的夹具说明，不是承运商承诺，也不是单件商品规则。"}
     },
     {
       "id": "shipment_known",
       "intent": "shipment",
-      "purpose": {"en": "Read a known synthetic tracking id.", "zh": "查询合成快照里存在的单号。"},
+      "product_ids": ["prod-shoes-court"],
+      "purpose": {"en": "Look up synthetic tracking id TRK-OK from this shop chat.", "zh": "在这个店铺对话里查询合成单号 TRK-OK。"},
       "samples": {"en": "tracking TRK-OK", "zh": "查物流 TRK-OK"},
       "limits": {"en": "TRK-OK is synthetic. It is not a live carrier lookup.", "zh": "TRK-OK 是合成单号，不是实时承运商查询。"}
     },
     {
       "id": "shipment_missing",
       "intent": "shipment",
-      "purpose": {"en": "Ask for a tracking id that is absent from the snapshot.", "zh": "查询快照里没有的单号。"},
+      "product_ids": ["prod-shoes-court"],
+      "purpose": {"en": "Ask for tracking id TRK-NO-SUCH, which is absent from the snapshot.", "zh": "查询快照里没有的单号 TRK-NO-SUCH。"},
       "samples": {"en": "tracking TRK-NO-SUCH", "zh": "查物流 TRK-NO-SUCH"},
       "limits": {"en": "An empty snapshot is not a carrier saying the shipment does not exist.", "zh": "快照为空不等于承运商否认这票货。"}
     },
     {
       "id": "knowledge",
       "intent": "knowledge_policy",
-      "purpose": {"en": "Retrieve a fictional membership note from the hashing index.", "zh": "用哈希索引检索虚构的会员说明。"},
+      "product_ids": ["prod-shoes-court"],
+      "purpose": {"en": "Retrieve the fictional membership note from the hashing index.", "zh": "用哈希索引检索虚构的会员说明。"},
       "samples": {"en": "kb policy: membership points", "zh": "kb policy: 会员积分"},
       "limits": {"en": "The score is a hashing cosine, not a semantic relevance score. The prefix is required.", "zh": "分数是哈希余弦，不是语义相关度。需要这个前缀。"}
     }
   ],
-  "guided": {
-    "autoplay": "first_session",
-    "pace_ms": 1600,
-    "seen_key": "northline-demo-guided",
-    "step_ids": ["consult_price", "search_budget", "returns"]
-  },
   "ui": {
     "en": {
-      "title": "Northline demo",
+      "title": "Demo Flagship Store",
       "banner": "Deterministic demo · synthetic catalog · no checkout",
       "guest": "Demo guest",
       "language": "Language",
-      "trace": "Trace",
-      "close_trace": "Close",
-      "reset": "New chat",
       "send": "Send",
       "cancel": "Cancel",
       "message_label": "Message",
       "placeholder": "Ask about this item",
       "shortcuts": "Shortcuts",
-      "consulting": "Viewing",
       "welcome": "Hello. You opened this chat from the product page. I can check this item's price and stock, and the return note, using the synthetic catalog.",
-      "guided": "Guided demo",
-      "fictional_user": "Fictional shopper",
-      "skip": "Skip",
-      "replay": "Replay",
-      "own_chat": "Start your own chat",
-      "pace_note": "Pauses are only for reading. The time on a turn is the measured run, not the pause.",
       "scenarios": "Supported scenarios",
       "close_scenarios": "Close",
-      "use_example": "Put this in the box",
-      "send_example": "Send this example",
+      "enter": "Enter",
       "scenario_limits": "Limits",
       "no_checkout": "This demo cannot place an order.",
       "ready": "Ready.",
@@ -152,7 +157,6 @@
       "boot_sqlite": "Loading the local catalog store.",
       "boot_runtime": "Loading the catalog snapshot.",
       "cancelled": "This result was discarded.",
-      "reset_done": "Chat reset. You are back on the item you opened.",
       "unknown_product": "That product id is not in the snapshot. No price or stock is shown.",
       "runtime_error": "This turn did not finish.",
       "empty_message": "Type a question first.",
@@ -160,10 +164,11 @@
       "unsupported": "I can answer price, stock, and the return window for the item you are viewing. Other questions need one of the supported sentences.",
       "price_line": "This item is {price} {currency}, with {stock} in stock.",
       "returns_line": "The current return window is {days} days for unused items.",
+      "knowledge_line": "Hashing index facts: {facts}. The document body was not followed.",
       "no_match": "Nothing in the snapshot matches that request.",
       "several": "These items matched. Prices and stock are from the snapshot.",
-      "trace_title": "This turn",
-      "trace_empty": "Open this after a question to see the route, skill, and evidence gate.",
+      "trace_title": "Execution trace",
+      "trace_empty": "Send a question to see the route, skills, tools, and evidence gate for this conversation.",
       "request": "Request",
       "duration": "Time",
       "duration_suffix": "ms, user_message only",
@@ -184,33 +189,22 @@
       "routes": {"direct_answer": "Direct", "clarification": "Needs detail", "human_escalation": "Person", "simple_skill": "One skill", "complex_handoff": "Planner"},
       "terminals": {"COMPLETED": "Done", "COMPLETED_NO_MATCH": "Nothing matched", "WAITING_USER": "Waiting", "FAILED": "Failed", "STOPPED": "Stopped", "ESCALATED": "Escalated"},
       "limitations": {"logistics_not_in_snapshot": "That tracking id is not in the snapshot. This is not a carrier saying the shipment does not exist.", "logistics_unavailable": "No usable tracking status came back.", "no_match": "Nothing matched the confirmed conditions.", "retrieval_miss": "No supported fact was found.", "untrusted_document": "Document text was not followed."},
-      "shipment": {"present": "Status below is from the synthetic snapshot.", "empty": "The snapshot has no record for that id.", "unavailable": "Tracking status is unavailable."}
+      "shipment": {"present": "Snapshot status:", "empty": "The snapshot has no record for that id.", "unavailable": "Tracking status is unavailable."}
     },
     "zh": {
-      "title": "澄选演示",
+      "title": "演示旗舰店",
       "banner": "确定性演示 · 合成目录 · 不能下单",
       "guest": "演示顾客",
       "language": "语言",
-      "trace": "链路",
-      "close_trace": "关闭",
-      "reset": "新对话",
       "send": "发送",
       "cancel": "取消",
       "message_label": "消息",
       "placeholder": "问问这件商品",
       "shortcuts": "快捷问题",
-      "consulting": "正在看",
       "welcome": "你好。你是从商品页进来的。我可以用合成目录核对这件商品的价格、库存和退货说明。",
-      "guided": "自动演示",
-      "fictional_user": "虚构顾客",
-      "skip": "跳过",
-      "replay": "重播",
-      "own_chat": "开始自己的对话",
-      "pace_note": "停顿只是为了阅读。回合上的时间是实际运行时间，不是停顿。",
       "scenarios": "支持的场景",
       "close_scenarios": "关闭",
-      "use_example": "填入输入框",
-      "send_example": "发送这句",
+      "enter": "进入",
       "scenario_limits": "限制",
       "no_checkout": "这个演示不能下单。",
       "ready": "可以发送。",
@@ -220,7 +214,6 @@
       "boot_sqlite": "正在加载本地目录存储。",
       "boot_runtime": "正在加载目录快照。",
       "cancelled": "这一轮的结果已丢弃。",
-      "reset_done": "对话已重置，回到你进来时的商品。",
       "unknown_product": "快照里没有这个商品编号，所以不显示价格或库存。",
       "runtime_error": "这一轮没有完成。",
       "empty_message": "请先输入问题。",
@@ -228,10 +221,11 @@
       "unsupported": "我可以回答你正在看的商品的价格、库存和退货时限。其他问题需要用支持的句子。",
       "price_line": "这件商品是 {price} {currency}，库存 {stock}。",
       "returns_line": "现行退货时限是 {days} 天，适用于未使用的商品。",
+      "knowledge_line": "哈希索引事实：{facts}。没有照着文档正文说。",
       "no_match": "快照里没有符合这个请求的结果。",
       "several": "这些商品符合条件。价格和库存来自快照。",
-      "trace_title": "这一轮",
-      "trace_empty": "提问之后打开这里，可以看到路由、技能和证据门。",
+      "trace_title": "执行记录",
+      "trace_empty": "发送问题后，这里显示这次对话的路由、技能、工具和证据门。",
       "request": "请求编号",
       "duration": "耗时",
       "duration_suffix": "毫秒，只计 user_message",
@@ -252,7 +246,7 @@
       "routes": {"direct_answer": "直接回答", "clarification": "需要补充", "human_escalation": "转人工", "simple_skill": "单项技能", "complex_handoff": "规划"},
       "terminals": {"COMPLETED": "完成", "COMPLETED_NO_MATCH": "没有匹配", "WAITING_USER": "等待补充", "FAILED": "失败", "STOPPED": "已停止", "ESCALATED": "已升级"},
       "limitations": {"logistics_not_in_snapshot": "快照里没有这个单号。这不是承运商证明货物不存在。", "logistics_unavailable": "没有得到可用的物流状态。", "no_match": "没有符合已确认条件的结果。", "retrieval_miss": "没有查到可引用的事实。", "untrusted_document": "没有照着文档正文说。"},
-      "shipment": {"present": "下面的状态来自合成快照。", "empty": "快照里没有这个单号。", "unavailable": "物流状态不可用。"}
+      "shipment": {"present": "快照状态：", "empty": "快照里没有这个单号。", "unavailable": "物流状态不可用。"}
     }
   }
 }
