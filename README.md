@@ -1,8 +1,8 @@
 # Shopping assistant lab
 
-Offline lab for a shopping **communication agent (CA)** and a **planner agent (PA)**. The CA decides whether to answer, ask a clarifying question, call a simple skill, hand off a complex task, or escalate to a person. The PA keeps a per-task plan with dependencies, calls skills, and checks evidence. Session memory outlives a single task. A task's working state does not.
+Offline lab for a shopping **communication agent (CA)** and a **planner agent (PA)**. The CA decides whether to answer, ask a clarifying question, call one skill, hand a multi-step task to the planner, or escalate to a person. The PA keeps a per-task plan with dependencies and requests the next skill. A separate evidence gate checks the reply. Session memory outlives a single task. A task's working state does not.
 
-The default path is a deterministic mock. It does not use the network, a credential, or a GPU. A configured chat-completions endpoint is optional, explicit, and is not called by the tests or the local chat UI.
+The default path is a deterministic mock. It does not use the network, a credential, or a GPU. A configured chat-completions endpoint is optional and explicit. The automated tests use a local stub, not a paid or live model. The public page never calls an endpoint. The local server calls one only after you opt in.
 
 Session context is a stable profile, notes from the last seven days, and the current session. The session bundle is the latest 10 messages, a summary through a watermark, and structured state. Details are in `docs/memory.md`. Evaluation uses three suites (development, regression, online sample). Those suites are separate from capability tags and from the train/val/test split; see `docs/evaluation.md`. Loop limits, model timeouts, and the 200 ms progress delay live in one settings file; see `docs/configuration.md`.
 
@@ -27,20 +27,92 @@ This repository is a demonstration. The curated corpus is not enough to train a 
 
 ## Flow
 
+A shopper sentence is one turn. Two kinds of work happen on that turn, and they are not the same thing.
+
+- A **model invocation** is a decision by the communication agent or the planner. On the public page these decisions are simulated and labeled. On a configured local server they are HTTP calls to the endpoint you opted in.
+- A **tool call** is a skill reading the synthetic catalog, a policy note, or a shipment snapshot. The tool returns evidence. It is not a model invocation, and it is not counted in the call totals below.
+
+The communication agent does not invent a price, a stock count, or a policy number. The shopper-facing sentence is rendered from tool evidence and then checked by the evidence gate. Neither agent has a hidden reasoning field in the trace.
+
+### Communication agent
+
+The communication agent reads the sentence and chooses one route:
+
+1. Answer directly. A capability question and a short thanks take this route. No tool runs, and the planner does not start.
+2. Ask for a missing detail, or say that this demo does not support the sentence. No tool runs, and the planner does not start.
+3. Call one skill. A price or stock quote, a return window, a shipment lookup, and a knowledge lookup take this route.
+4. Hand a multi-step shopping task to the planner.
+5. Escalate to a person when the shopper asks for one, or when tool evidence conflicts.
+
+Routes 1, 2, and 5 are communication-agent only. Route 3 is still communication-agent only: one skill runs, and the planner is not called. Route 4 is the only path that starts the planner.
+
+### Planner agent
+
+The planner runs only after a handoff. It keeps a short plan. A later step can depend on an earlier observation. Each planner invocation does one of these:
+
+1. Build the plan and request the first ready skill.
+2. After that skill returns, request the next ready skill. This happens only when the plan still has a step waiting on the observation.
+3. When no step is waiting, finish from the observations.
+
+The runtime then executes the requested skill. The skill's result is an observation for the next planner invocation. The communication agent writes the shopper-facing sentence after the planner finishes.
+
+### Communication agent only
+
 ```mermaid
-flowchart LR
-  cards[Scenario cards] --> sim[User simulator]
-  sim --> sandbox[Session sandbox]
-  catalog[Catalog module] --> mcp[MCP server]
-  kb[Knowledge module] --> mcp
-  sandbox --> mcp
-  ca[Communication agent] --> skills[Skills]
-  pa[Planner agent] --> skills
-  skills --> mcp
-  sandbox --> traces[Traces and outcome scores]
-  traces --> report[JSON and markdown report]
-  examples[Demonstration SFT examples] --> dry[Training dry-run]
+flowchart TD
+  shopper[Shopper sentence] --> ca[CA chooses a route]
+  ca -->|direct answer or clarification| once[One combined CA record]
+  ca -->|one skill| tool[Skill reads the snapshot]
+  tool --> answer[CA writes the reply from that evidence]
 ```
+
+A direct answer or a clarification is one recorded communication-agent call. The sentence is included in that same record. There is no second call just to render it.
+
+A one-skill turn is two recorded communication-agent calls. The first requests the skill. The tool runs. The second writes the reply from the tool result. That second record is the evidence renderer. On the public page it is labeled as a simulated communication-agent step. It is not a second network request, and the tool between the two records is not a model call.
+
+### Communication agent and planner
+
+```mermaid
+flowchart TD
+  shopper[Shopper sentence] --> ca[CA hands the task off]
+  ca --> pa[PA requests the next skill]
+  pa --> tool[Runtime runs that skill]
+  tool --> next{Another step is ready?}
+  next -->|yes| pa
+  next -->|no| finish[PA finishes from the observations]
+  finish --> answer[CA writes the reply]
+```
+
+The communication agent is recorded twice: the handoff, and the final reply. The planner count is the number of times it actually decides. A skill that runs between those decisions is not another model invocation. Some of those skills call a snapshot tool. The budget check does not: it only filters items the search already returned.
+
+### Four example classes
+
+These counts are for the example question on the matching scenario card. A later sentence in the same conversation can take a different route. Each card also has a Chinese example. That example takes the same route and the same counts. The public page records every one of these calls as simulated, inside the browser, with zero network model calls.
+
+| Class | Example question | What the example actually does | CA | PA |
+| --- | --- | --- | --- | --- |
+| CA only, one call | What can you help with? | One combined route and answer. No tool and no planner. | 1 | 0 |
+| CA only, two calls | How much is this item? | CA requests a quote. The snapshot tool returns the price and stock. CA writes the reply from that quote. | 2 | 0 |
+| CA plus PA, PA twice | browse drinkware under 20 | CA hands off. PA plans and requests one search. PA then finishes from that search. CA writes the reply. The extra budget check does not run. | 2 | 2 |
+| CA plus PA, PA more than twice | find drinkware under 20 | CA hands off. PA plans and requests a search. The search tool runs. PA then requests the budget check, which filters those items and calls no tool. PA then finishes. CA writes the reply. | 2 | 3 |
+
+The stock, return-window, known-shipment, missing-shipment, and membership-note cards are the same two-call communication-agent class as the price question. Comparing the Matte ceramic mug 350 ml with the Blue stoneware mug 350 ml is the more-than-twice planner class with a longer plan: PA 4 and CA 2, six recorded calls in total. Those four planner calls are the plan plus the first quote, the second quote, the compare, and the finish.
+
+### Public demo and a local endpoint
+
+The public page always uses the mock decisions above. It does not call a chat-completions model, and it has no field for an API key. The pauses while a reply appears are presentation timing, not model latency.
+
+A local server can call a real endpoint only after you set `SHOPASSIST_MODE=configured_endpoint` and `SHOPASSIST_OPT_IN_CONFIGURED_MODEL=yes`, and you provide a base URL and model name for each agent. That mode does not add the simulated records.
+
+1. The communication agent is one HTTP request. Its JSON chooses the route. For a direct answer or a clarification, that same response includes the reply text.
+2. A simple skill or a handoff still renders the price, stock, and policy sentences from tool evidence. The model does not supply those numbers.
+3. The planner is one HTTP request for each decision it returns. How many times it is called depends on the decisions it returns. It is not fixed to the counts in the table above.
+4. Accepted planner goals are `search`, `recommend`, `compare`, and `oos`. The one-search browse plan is a mock-only demo path.
+5. A missing opt-in, a missing endpoint or model, HTTP 401, or invalid JSON fails the turn. The server does not silently switch back to the mock. HTTP 429 and 503 can be retried inside `loop.max_retries_per_step`.
+
+Automated tests use a local stub. Compatibility with a live provider account was not verified.
+
+The regression harness is separate from these shopper turns. Scenario cards drive a user simulator, the simulator does not read plans or tool payloads, and the scorer writes a local report. The training dry-run reads exported examples. It does not run this turn loop.
 
 ## Quickstart
 
@@ -76,22 +148,6 @@ python -m shopassist.cli bench --component catalog
 `--execute` on `configs/sft_*_smoke.json` returns a non-success status when that model directory is absent. It does not fall back to the mock and then report a successful training run. `configs/sft_*_local_random.json` is a separate CPU smoke: it builds a generated tiny model, runs two momentum-SGD steps, and reloads the adapter. That smoke is not a quality result. The larger configs under `configs/sft_*_larger.json` raise the rank and the step count; those files were not executed, and no GPU training was verified.
 
 A missing baseline is a blocked compare, not a pass. An unavailable judge stays null. Gates live in `configs/gates_demo.json` and are marked `demonstration_not_production`.
-
-## 中文说明
-
-这是一个离线的购物助手实验工程。沟通代理负责理解用户、直接回答、澄清、简单查询、转人工，或把复杂任务交给规划代理。规划代理维护带依赖的任务计划，并通过技能调用工具。简单致谢和闲聊不会进入规划代理。
-
-默认是确定性的模拟模式，不需要网络、密钥或显卡。演示语料很小，不能当作正式训练已经充分。更大模型与显卡训练没有验证。
-
-如果已经设置本说明里的环境变量和显式开关，在页面里选择“Configured model”。服务端会调用你配置的端点，浏览器拿不到密钥。配置不完整时请求会失败，不会悄悄改回模拟模式。本地随机小模型的 CPU 冒烟训练只证明优化器能走几步并重新加载，不是效果验证。
-
-```bash
-python -m shopassist.cli quickstart
-python -m unittest discover -s tests -v
-python -m shopassist.web.server --host 127.0.0.1 --port 8765
-```
-
-可选的模型模式需要同时设置 `SHOPASSIST_MODE=configured_endpoint` 和 `SHOPASSIST_OPT_IN_CONFIGURED_MODEL=yes`，并分别提供沟通代理与规划代理的地址和模型名。密钥只放在环境变量或被 git 忽略的 `config/local_model.json` 里。本地聊天页面不会发起该调用。
 
 ## Layout
 
@@ -168,7 +224,7 @@ Open the page and choose **Configured model**. The server calls the CA endpoint,
 
 `python -m shopassist.pages.build --output site --base /ShoppingAssistant/` writes a static site. GitHub Pages cannot run the Python server, MySQL, or Redis. The page loads a pinned Pyodide build from the site itself and runs the mock session in the browser. Tool calls use the in-process gateway on the synthetic snapshots. The prebuilt knowledge index uses the hashing lexical baseline. The page does not download an embedding model and does not call MCP or a vector database.
 
-The shop name on the page is Demo Flagship Store, and 演示旗舰店 in Chinese. English is the default. The first screen is a consultation for the catalog item Canvas court shoes (`prod-shoes-court`, 48 USD, stock 16). Product photos are original files shipped with the page. The layout is a conversation on the left and the execution trace on the right. Bot messages stay on the left of the conversation and shopper messages stay on the right. Nothing is sent automatically. Supported scenarios opens a list; each scenario has one Enter button, which starts a fresh conversation on that scenario's product and does not send a question. The trace panel shows the route, skills, tools, and evidence gate recorded for the turns in the current conversation.
+The shop name on the page is Demo Flagship Store. The Chinese view uses the Chinese store name from the page configuration. English is the default. The first screen is a consultation for the catalog item Canvas court shoes (`prod-shoes-court`, 48 USD, stock 16). Product photos are original files shipped with the page. The layout is a conversation on the left and the execution trace on the right. Bot messages stay on the left of the conversation and shopper messages stay on the right. Nothing is sent automatically. Supported scenarios opens a list; each scenario has one Enter button, which starts a fresh conversation on that scenario's product and does not send a question. The trace panel shows the route, skills, tools, and evidence gate recorded for the turns in the current conversation.
 
 This page runs the mock communication agent, planner, skills, and evidence gate inside the browser. It does not call a chat-completions model.
 
@@ -180,7 +236,7 @@ The separate local Python server can use a configured model endpoint. This page 
 
 The page uses the built-in default settings. It ignores SHOPASSIST environment variables and the local settings file. The local server still applies those.
 
-The page sends the sentence shown on each shortcut. Chinese questions such as 这个商品多少钱 are parsed directly. Catalog category ids such as drinkware stay in English.
+The page sends the sentence shown on each shortcut. Chinese questions about this item's price are parsed directly. Catalog category ids such as drinkware stay in English.
 
 Nothing here places an order or takes payment. Shipment answers describe the synthetic snapshot only.
 
@@ -202,7 +258,7 @@ The lab's original knowledge lookup is literal. `KnowledgeBase.search` checks wh
 
 `python -m shopassist.cli build-index` embeds those chunks and writes `data/kb_index`. The default encoder is `hashing_lexical_baseline` (`char-word-hash-hash-v1`, 128 dimensions). Its score is a hashing cosine after a lexical token check. It is not a trained semantic embedding. `sentence_transformers` is optional: set `knowledge.encoder` and `knowledge.embedding_model` together. If the package or model is missing, the build fails and does not switch back to hashing. That semantic path was not executed in this lab because `sentence-transformers` is not installed.
 
-`python -m shopassist.cli retrieve --query "会员积分" --corpus policy` reads the index. A query whose tokens are absent returns `empty` / `no_match`. A dimension, model id, or encoder version that does not match the manifest raises `index_mismatch` and does not compare the vectors. Rebuilding the same corpus replaces the directory, so deleted ids do not linger.
+`python -m shopassist.cli retrieve --query "membership points" --corpus policy` reads the index. A query whose tokens are absent returns `empty` / `no_match`. A dimension, model id, or encoder version that does not match the manifest raises `index_mismatch` and does not compare the vectors. Rebuilding the same corpus replaces the directory, so deleted ids do not linger.
 
 `kb policy:` and `kb product:` run the `knowledge_retrieve` skill through MCP on the local server, or in-process on the static page. Policy facts come from chunk metadata. The body is untrusted and is not copied into the reply. Product hits are quoted on the fictional catalog before a price or stock is stated, and a confirmed budget still filters them. Details are in `docs/knowledge.md`.
 
