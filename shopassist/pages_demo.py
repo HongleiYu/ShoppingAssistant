@@ -54,12 +54,15 @@ def load_demo_config() -> dict:
             raise ValueError("demo_config_missing_fields")
         if not suggestions.get("en") or not suggestions.get("zh"):
             raise ValueError("demo_config_missing_fields")
-    stream = data.get("stream") or {}
-    if not stream.get("step_ms") or not stream.get("chunk_chars"):
-        raise ValueError("demo_config_missing_fields")
+        calls = scenario.get("calls") or {}
+        if not isinstance(calls.get("ca"), int) or not isinstance(calls.get("pa"), int):
+            raise ValueError("demo_config_missing_fields")
         for product_id in product_ids:
             if product_id not in images:
                 raise ValueError("demo_config_missing_fields")
+    stream = data.get("stream") or {}
+    if not stream.get("step_ms") or not stream.get("chunk_chars"):
+        raise ValueError("demo_config_missing_fields")
     return data
 
 

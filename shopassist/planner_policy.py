@@ -42,6 +42,12 @@ def initial_plan(task: dict) -> list[dict]:
     return [_step("s1", "product_search", [], {"filters": filters_from_query(query), "backend": "primary", "limit": 10})]
 
 
+def browse_only_plan(task: dict) -> list[dict]:
+    return [
+        _step("s1", "product_search", [], {"filters": filters_from_query(task["query"]), "backend": "primary", "limit": 10}),
+    ]
+
+
 def browse_plan(task: dict) -> list[dict]:
     return [
         _step("b1", "product_search", [], {"filters": filters_from_query(task["query"]), "backend": "browse", "limit": 10}),
@@ -58,7 +64,13 @@ def alternative_plan(task: dict) -> list[dict]:
 
 class PlanRegistry:
     def __init__(self):
-        self._builders = {"search": initial_plan, "recommend": initial_plan, "compare": initial_plan, "oos": initial_plan}
+        self._builders = {
+            "search": initial_plan,
+            "recommend": initial_plan,
+            "compare": initial_plan,
+            "oos": initial_plan,
+            "browse": browse_only_plan,
+        }
 
     def register(self, goal_type: str, builder) -> None:
         self._builders[goal_type] = builder

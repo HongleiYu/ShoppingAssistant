@@ -22,6 +22,7 @@ HANDOFF_INTENTS = {
     "compare",
     "compare_warranty",
     "oos",
+    "browse",
     "change_budget",
     "add_color",
     "help_find",
@@ -123,6 +124,7 @@ def decide_route(features: dict, memory: dict) -> dict:
             "compare": "compare",
             "compare_warranty": "compare",
             "oos": "oos",
+            "browse": "browse",
         }[intent]
         return _decision("complex_handoff", "needs_plan", intent, False, goal_type=goal)
     return _decision("clarification", "unrecognized", intent, True, missing=["request"])

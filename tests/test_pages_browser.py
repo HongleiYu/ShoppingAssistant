@@ -80,9 +80,9 @@ class PagesBrowserTest(unittest.TestCase):
             page.screenshot(path=str(self.shots / "pages_trace_desktop.png"))
             page.locator("#open-scenarios").click()
             page.locator("#scenario-list article").first.wait_for()
-            self.assertEqual(page.locator("#scenario-list article").count(), 8)
-            self.assertEqual(page.locator("#scenario-list article button").count(), 8)
-            self.assertEqual(page.locator("#scenario-list button", has_text="Enter").count(), 8)
+            self.assertEqual(page.locator("#scenario-list article").count(), 10)
+            self.assertEqual(page.locator("#scenario-list article button").count(), 10)
+            self.assertEqual(page.locator("#scenario-list button", has_text="Enter").count(), 10)
             self.assertEqual(page.locator("#scenario-list button", has_text="How much is this item?").count(), 0)
             page.wait_for_function(
                 """() => {
@@ -137,7 +137,7 @@ class PagesBrowserTest(unittest.TestCase):
             for label in ("链路", "跳过", "新对话", "Trace", "Skip", "New chat"):
                 self.assertEqual(page.get_by_role("button", name=label, exact=True).count(), 0)
             page.locator("#open-scenarios").click()
-            self.assertEqual(page.locator("#scenario-list button", has_text="进入").count(), 8)
+            self.assertEqual(page.locator("#scenario-list button", has_text="进入").count(), 10)
             page.locator("article[data-scenario='consult_stock'] button").click()
             page.wait_for_function("() => document.querySelector('#status').textContent === '可以发送。'")
             page.locator("#message").fill("这个商品多少钱？")
@@ -175,7 +175,9 @@ class PagesBrowserTest(unittest.TestCase):
 
         welcomes = {
             "consult_price": "Hello. You opened the canvas court shoes",
+            "capabilities": "asks what the shop demo can answer",
             "consult_stock": "whether the canvas court shoes are in stock",
+            "browse_budget": "browses drinkware under 20",
             "search_budget": "searches drinkware under 20",
             "compare": "compares the matte ceramic mug",
             "returns": "shared return note",
@@ -209,4 +211,41 @@ class PagesBrowserTest(unittest.TestCase):
             page.locator("#message").fill("随便聊聊今天")
             page.locator("#send").click()
             page.locator(".reply", has_text="当前代码演示仅支持给定的示例问题，请选择下方建议问题或支持的场景。").last.wait_for(timeout=30000)
+            page.locator("#lang-en").click()
+            page.locator("#open-scenarios").click()
+            page.get_by_text("Example turn: CA 1, PA 0, total 1.").wait_for()
+            page.get_by_text("Example turn: CA 2, PA 2, total 4.").wait_for()
+            page.get_by_text("Example turn: CA 2, PA 3, total 5.").wait_for()
+            page.get_by_text("These counts are for the example question on the card, not a guarantee for a later message.").wait_for()
+            page.screenshot(path=str(self.shots / "pages_scenario_calls.png"))
+            page.locator("#close-scenarios").click()
+            page.locator("#lang-zh").click()
+            page.locator("#open-scenarios").click()
+            page.get_by_text("示例这一轮：沟通代理 2 次，规划代理 2 次，合计 4 次。").wait_for()
+            page.get_by_text("这些次数只对卡片上的示例问题，不是之后任意输入的保证。").wait_for()
+            page.locator("#close-scenarios").click()
+            page.locator("#lang-en").click()
+            page.locator("#open-scenarios").click()
+            page.locator("article[data-scenario='browse_budget'] button").click()
+            page.locator("[data-role='welcome']", has_text="browses drinkware under 20").wait_for(timeout=30000)
+            page.locator("#chips button", has_text="browse drinkware under 20").click()
+            page.locator(".reply", has_text="These items matched. Prices and stock are from the snapshot.").wait_for(timeout=30000)
+            self.assertEqual(page.locator("[data-trace='sim-ca'] b").inner_text(), "2")
+            self.assertEqual(page.locator("[data-trace='sim-pa'] b").inner_text(), "2")
+            self.assertEqual(page.locator("[data-trace='sim-total'] b").inner_text(), "4")
+            self.assertEqual(page.locator("[data-trace='sim-network'] b").inner_text(), "0")
+            self.assertIn("2. pa plan_and_tool", page.locator("#trace-body").inner_text())
+            self.assertIn("3. pa observe_and_finish", page.locator("#trace-body").inner_text())
+            page.screenshot(path=str(self.shots / "pages_pa2_trace.png"))
+            page.locator("#open-scenarios").click()
+            page.locator("article[data-scenario='search_budget'] button").click()
+            page.locator("[data-role='welcome']", has_text="searches drinkware under 20").wait_for(timeout=30000)
+            page.locator("#chips button", has_text="find drinkware under 20").click()
+            page.locator(".reply", has_text="These items matched. Prices and stock are from the snapshot.").last.wait_for(timeout=30000)
+            self.assertEqual(page.locator("[data-trace='sim-ca'] b").inner_text(), "2")
+            self.assertEqual(page.locator("[data-trace='sim-pa'] b").inner_text(), "3")
+            self.assertEqual(page.locator("[data-trace='sim-total'] b").inner_text(), "5")
+            self.assertIn("3. pa observe_and_tool", page.locator("#trace-body").inner_text())
+            self.assertIn("4. pa observe_and_finish", page.locator("#trace-body").inner_text())
+            page.screenshot(path=str(self.shots / "pages_pa3_trace.png"))
             browser.close()

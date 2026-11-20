@@ -55,9 +55,18 @@ def ca_answer_record(turn: dict, rendered: dict) -> dict:
 
 def pa_record(task: dict, outcome: dict) -> dict:
     call = outcome.get("skill_call") or {}
+    action = outcome.get("action") or "step"
+    if action == "plan" and call.get("skill_id"):
+        phase = "plan_and_tool"
+    elif action == "tool_call":
+        phase = "observe_and_tool"
+    elif action == "finish":
+        phase = "observe_and_finish"
+    else:
+        phase = action
     return {
         "agent": "pa",
-        "phase": outcome.get("action") or "step",
+        "phase": phase,
         "simulated": True,
         "network": False,
         "adapter": "shopassist.planner_policy.act",
@@ -71,6 +80,26 @@ def pa_record(task: dict, outcome: dict) -> dict:
             "skill_id": call.get("skill_id"),
             "step_id": call.get("step_id"),
             "failure_reason": (outcome.get("failure") or {}).get("reason_code") if isinstance(outcome.get("failure"), dict) else None,
+        },
+    }
+
+
+def ca_combined_record(features: dict, decision: dict, rendered: dict) -> dict:
+    return {
+        "agent": "ca",
+        "phase": "route_and_answer",
+        "simulated": True,
+        "network": False,
+        "adapter": "shopassist.dispatch.decide_route",
+        "input": {
+            "latest_user_turn": features.get("text") or "",
+            "intent": features.get("intent"),
+        },
+        "output": {
+            "route": decision.get("route"),
+            "route_reason_code": decision.get("route_reason_code"),
+            "reply_text": rendered.get("text") or "",
+            "speaks": "route_and_answer",
         },
     }
 

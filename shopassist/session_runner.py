@@ -181,7 +181,7 @@ class AgentSession:
             self._invocation_turn = turn
             self._record_ca_route(turn, features, decision)
             rendered = self._resume(features, decision, text, turn)
-            self._record_ca_answer(turn, rendered)
+            self._record_ca_after(turn, features, decision, rendered)
             return self._commit(text, turn, rendered)
         turn = self._blank_turn(text, memory_before, decision)
         self._invocation_turn = turn
@@ -204,7 +204,7 @@ class AgentSession:
             rendered = self._handoff(features, decision, text, turn)
         else:
             rendered = render_clarification(decision)
-        self._record_ca_answer(turn, rendered)
+        self._record_ca_after(turn, features, decision, rendered)
         return self._commit(text, turn, rendered)
 
     def _commit(self, text: str, turn: dict, rendered: dict) -> dict:
@@ -644,6 +644,15 @@ class AgentSession:
 
         turn.setdefault("model_invocations", []).append(ca_answer_record(turn, rendered))
         self._emit_model("ca", "answer", None)
+
+    def _record_ca_after(self, turn: dict, features: dict, decision: dict, rendered: dict) -> None:
+        from shopassist.mock_agents import ca_combined_record, needs_route_call
+
+        if needs_route_call(decision):
+            self._record_ca_answer(turn, rendered)
+            return
+        turn.setdefault("model_invocations", []).append(ca_combined_record(features, decision, rendered))
+        self._emit_model("ca", "route_and_answer", None)
 
     def _emit_model(self, agent: str, phase: str, skill_id: str | None) -> None:
         if self.on_progress is None or self._progress_generation != self.generation:
