@@ -130,6 +130,10 @@ function applyChrome() {
 function renderScenarios() {
   const list = document.querySelector("#scenario-list");
   list.replaceChildren();
+  const note = document.createElement("p");
+  note.className = "note";
+  note.textContent = t().call_note;
+  list.appendChild(note);
   for (const scenario of config.scenarios) {
     const block = document.createElement("article");
     block.className = "scenario";
@@ -147,10 +151,17 @@ function renderScenarios() {
     const sample = document.createElement("p");
     sample.className = "sample";
     sample.textContent = scenario.samples[locale];
+    const counts = document.createElement("p");
+    counts.className = "note call-count";
+    counts.textContent = fill(t().call_count, {
+      ca: scenario.calls.ca,
+      pa: scenario.calls.pa,
+      total: scenario.calls.ca + scenario.calls.pa,
+    });
     const limits = document.createElement("p");
     limits.className = "note";
     limits.textContent = scenario.limits[locale];
-    copy.append(title, sample, limits);
+    copy.append(title, sample, counts, limits);
     const enter = document.createElement("button");
     enter.type = "button";
     enter.className = "enter";
@@ -420,13 +431,21 @@ function traceNodes(turn) {
   addRow(root, t().route, `${t().routes[turn.route] || turn.route} · ${turn.route_reason_code || ""}`);
   addRow(root, t().planner, turn.planner_invoked ? t().planner_yes : t().planner_no);
   addRow(root, t().terminal, `${t().terminals[turn.terminal && turn.terminal.status] || ""} · ${(turn.terminal && turn.terminal.reason_code) || ""}`);
+  const invocations = turn.model_invocations || [];
+  const caCount = invocations.filter((item) => item.agent === "ca").length;
+  const paCount = invocations.filter((item) => item.agent === "pa").length;
+  const networkCount = invocations.filter((item) => item.network).length;
+  addRow(root, t().sim_ca, String(caCount), "sim-ca");
+  addRow(root, t().sim_pa, String(paCount), "sim-pa");
+  addRow(root, t().sim_total, String(caCount + paCount), "sim-total");
+  addRow(root, t().sim_network, String(networkCount), "sim-network");
   addRow(root, t().model, turn.simulated_model ? t().model_simulated : (turn.model_called ? "called" : t().model_no));
-  for (const call of turn.model_invocations || []) {
+  invocations.forEach((call, index) => {
     const line = document.createElement("p");
     line.className = "model-call";
-    line.textContent = `${call.agent} ${call.phase} · ${call.adapter || ""} · ${call.network ? "network" : "simulated · no network"}`;
+    line.textContent = `${index + 1}. ${call.agent} ${call.phase} · ${call.adapter || ""} · ${call.network ? "network" : "simulated · no network"}`;
     root.appendChild(line);
-  }
+  });
   addRow(root, t().gate, fill(t().gate_line, {
     allowed: turn.evidence_gate ? turn.evidence_gate.allowed_count : 0,
     blocked: turn.evidence_gate && turn.evidence_gate.blocked ? turn.evidence_gate.blocked.length : 0,
@@ -459,9 +478,10 @@ function showNote(text) {
   transcript.appendChild(node);
 }
 
-function addRow(root, label, value) {
+function addRow(root, label, value, key) {
   const row = document.createElement("div");
   row.className = "row";
+  if (key) row.dataset.trace = key;
   const name = document.createElement("span");
   name.textContent = label;
   const val = document.createElement("b");

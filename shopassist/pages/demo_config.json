@@ -41,6 +41,10 @@
     {
       "en": "The page records a simulated communication-agent and planner lifecycle around the real tool calls, then reveals the validated reply in short steps. Those calls do not leave the browser, and the pauses are not model latency.",
       "zh": "页面在真实工具调用前后记录模拟的沟通代理和规划代理过程，再把已核对的回答分段显示。这些调用不出浏览器，停顿也不是模型延迟。"
+    },
+    {
+      "en": "The counts on a scenario card are for that card's example question. A later message can take a different route.",
+      "zh": "场景卡片上的次数只对那张卡片的示例问题。后面的话可以走另一条路由。"
     }
   ],
   "images": {
@@ -139,6 +143,49 @@
           "这个商品多少钱？",
           "Canvas court shoes 多少钱？"
         ]
+      },
+      "calls": {
+        "ca": 2,
+        "pa": 0
+      }
+    },
+    {
+      "id": "capabilities",
+      "intent": "capabilities",
+      "product_ids": [
+        "prod-shoes-court"
+      ],
+      "calls": {
+        "ca": 1,
+        "pa": 0
+      },
+      "purpose": {
+        "en": "Ask what this shop demo can answer, with no catalog tool.",
+        "zh": "询问这个店铺演示能回答什么，不查商品工具。"
+      },
+      "samples": {
+        "en": "What can you help with?",
+        "zh": "你能帮什么忙？"
+      },
+      "limits": {
+        "en": "This example is one communication-agent decision. It does not call the planner.",
+        "zh": "这个示例只有一次沟通代理决策，不会调用规划代理。"
+      },
+      "welcome": {
+        "en": "This conversation asks what the shop demo can answer. No catalog lookup runs until you ask for an item.",
+        "zh": "这次对话是问这个店铺演示能回答什么。你不问具体商品，就不会查目录。"
+      },
+      "context_note": {
+        "en": "The example question is one simulated communication-agent call.",
+        "zh": "示例问题是一次模拟沟通代理调用。"
+      },
+      "suggestions": {
+        "en": [
+          "What can you help with?"
+        ],
+        "zh": [
+          "你能帮什么忙？"
+        ]
       }
     },
     {
@@ -175,6 +222,49 @@
         "zh": [
           "这个商品有货吗？",
           "这个商品库存多少？"
+        ]
+      },
+      "calls": {
+        "ca": 2,
+        "pa": 0
+      }
+    },
+    {
+      "id": "browse_budget",
+      "intent": "browse",
+      "product_ids": [
+        "prod-mug-sand"
+      ],
+      "calls": {
+        "ca": 2,
+        "pa": 2
+      },
+      "purpose": {
+        "en": "Browse drinkware under 20. The planner requests one search, then finishes from that result.",
+        "zh": "浏览 20 以内的 drinkware。规划代理先请求一次检索，再根据结果结束。"
+      },
+      "samples": {
+        "en": "browse drinkware under 20",
+        "zh": "浏览 drinkware，20以内"
+      },
+      "limits": {
+        "en": "The example uses two planner calls: plan and request the search, then observe and finish. It does not run the extra budget check.",
+        "zh": "示例是两次规划代理调用：先规划并请求检索，再观察结果并结束。不会再跑额外的预算核对。"
+      },
+      "welcome": {
+        "en": "This conversation browses drinkware under 20. Ask when you want the search. Only this mug is open until results arrive.",
+        "zh": "这次对话浏览 20 以内的 drinkware。你发问之后才会检索。结果出来之前只打开这一只杯子。"
+      },
+      "context_note": {
+        "en": "Example model calls: communication agent 2, planner 2.",
+        "zh": "示例模型调用：沟通代理 2 次，规划代理 2 次。"
+      },
+      "suggestions": {
+        "en": [
+          "browse drinkware under 20"
+        ],
+        "zh": [
+          "浏览 drinkware，20以内"
         ]
       }
     },
@@ -213,6 +303,10 @@
         "zh": [
           "找 drinkware，20以内"
         ]
+      },
+      "calls": {
+        "ca": 2,
+        "pa": 3
       }
     },
     {
@@ -249,6 +343,10 @@
         "zh": [
           "对比 Matte ceramic mug 350 ml 和 Blue stoneware mug 350 ml"
         ]
+      },
+      "calls": {
+        "ca": 2,
+        "pa": 4
       }
     },
     {
@@ -284,6 +382,10 @@
         "zh": [
           "退货时限是多久？"
         ]
+      },
+      "calls": {
+        "ca": 2,
+        "pa": 0
       }
     },
     {
@@ -319,6 +421,10 @@
         "zh": [
           "查物流 TRK-OK"
         ]
+      },
+      "calls": {
+        "ca": 2,
+        "pa": 0
       }
     },
     {
@@ -354,6 +460,10 @@
         "zh": [
           "查物流 TRK-NO-SUCH"
         ]
+      },
+      "calls": {
+        "ca": 2,
+        "pa": 0
       }
     },
     {
@@ -389,6 +499,10 @@
         "zh": [
           "kb policy: 会员积分"
         ]
+      },
+      "calls": {
+        "ca": 2,
+        "pa": 0
       }
     }
   ],
@@ -482,11 +596,16 @@
       },
       "sim_ca_tool": "Simulated CA requested {skill}.",
       "sim_ca_handoff": "Simulated CA handed this turn to the planner.",
-      "sim_pa": "Simulated PA {phase} {skill}.",
+      "sim_pa": "Simulated PA calls",
       "sim_running": "Simulated step.",
       "validated_facts": "Validated facts:",
       "stream_label": "Simulated streaming. Pauses are for reading, not model latency.",
-      "unsupported_demo": "This code demo only supports the provided example questions. Choose one of the suggested questions or a supported scenario."
+      "unsupported_demo": "This code demo only supports the provided example questions. Choose one of the suggested questions or a supported scenario.",
+      "call_count": "Example turn: CA {ca}, PA {pa}, total {total}.",
+      "call_note": "These counts are for the example question on the card, not a guarantee for a later message.",
+      "sim_ca": "Simulated CA calls",
+      "sim_total": "Total model calls",
+      "sim_network": "Network model calls"
     },
     "zh": {
       "title": "演示旗舰店",
@@ -577,11 +696,16 @@
       },
       "sim_ca_tool": "模拟沟通代理请求了 {skill}。",
       "sim_ca_handoff": "模拟沟通代理把这一轮交给了规划代理。",
-      "sim_pa": "模拟规划代理 {phase} {skill}。",
+      "sim_pa": "模拟规划代理次数",
       "sim_running": "模拟步骤。",
       "validated_facts": "已核对事实：",
       "stream_label": "模拟逐段显示。停顿是为了阅读，不是模型延迟。",
-      "unsupported_demo": "当前代码演示仅支持给定的示例问题，请选择下方建议问题或支持的场景。"
+      "unsupported_demo": "当前代码演示仅支持给定的示例问题，请选择下方建议问题或支持的场景。",
+      "call_count": "示例这一轮：沟通代理 {ca} 次，规划代理 {pa} 次，合计 {total} 次。",
+      "call_note": "这些次数只对卡片上的示例问题，不是之后任意输入的保证。",
+      "sim_ca": "模拟沟通代理次数",
+      "sim_total": "模型调用合计",
+      "sim_network": "网络模型调用"
     }
   },
   "stream": {

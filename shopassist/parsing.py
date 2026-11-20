@@ -39,10 +39,12 @@ def detect_intent(text: str) -> str:
         return "ack"
     if "weather" in lowered or "joke" in lowered:
         return "irrelevant"
-    if "what shopping topics" in lowered or "what can you help" in lowered:
-        return "capabilities"
     if "actually my max" in lowered:
         return "contradict_budget"
+    if "what can you help" in lowered or "what shopping topics" in lowered:
+        return "capabilities"
+    if lowered.startswith("browse "):
+        return "browse"
     if lowered.startswith("compare warranty"):
         return "compare_warranty"
     if lowered.startswith("compare"):
@@ -149,6 +151,12 @@ def extract_features(text: str, name_index: list[dict]) -> dict:
 
 
 def _cjk_intent(text: str) -> str | None:
+    if "你能帮" in text or "你能做什么" in text:
+        return "capabilities"
+    if "如果" in text and "没货" in text:
+        return "oos"
+    if text.startswith("浏览"):
+        return "browse"
     if "退货" in text:
         return "policy_returns"
     if "保修" in text:

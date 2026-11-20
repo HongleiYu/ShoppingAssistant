@@ -183,7 +183,7 @@ class ProductEntryTest(unittest.TestCase):
             self.assertEqual(again["display_cards"], [])
             search = app.turn("find drinkware under 20")
             self.assertEqual(search["model_invocations"][0]["output"]["route"], "complex_handoff")
-            self.assertTrue(any(item["agent"] == "pa" and item["phase"] == "plan" for item in search["model_invocations"]))
+            self.assertTrue(any(item["agent"] == "pa" and item["phase"] == "plan_and_tool" for item in search["model_invocations"]))
             self.assertEqual(search["model_invocations"][-1]["phase"], "answer")
             self.assertEqual(
                 [card["product_id"] for card in search["display_cards"]],
@@ -230,6 +230,36 @@ class ProductEntryTest(unittest.TestCase):
             self.assertNotEqual(missing["route_reason_code"], "unrecognized")
             self.assertEqual(english["terminal"]["reason_code"], "unrecognized")
             self.assertNotIn("price", english["reply_text"].lower())
+        finally:
+            app.close()
+
+    def test_example_questions_match_advertised_model_calls(self):
+        config = json.loads((ROOT / "shopassist" / "pages" / "demo_config.json").read_text(encoding="utf-8"))
+        classes = set()
+        app = DemoApp()
+        try:
+            for scenario in config["scenarios"]:
+                app.consult(scenario["product_ids"][0])
+                for locale in ("en", "zh"):
+                    turn = app.turn(scenario["samples"][locale])
+                    invocations = turn["model_invocations"]
+                    ca = sum(1 for item in invocations if item["agent"] == "ca")
+                    pa = sum(1 for item in invocations if item["agent"] == "pa")
+                    self.assertEqual(ca, scenario["calls"]["ca"], scenario["id"] + locale)
+                    self.assertEqual(pa, scenario["calls"]["pa"], scenario["id"] + locale)
+                    self.assertEqual(ca + pa, len(invocations))
+                    self.assertTrue(all(item["simulated"] and item["network"] is False for item in invocations))
+                    classes.add((ca, pa))
+                    if pa == 2:
+                        self.assertEqual(
+                            [item["phase"] for item in invocations if item["agent"] == "pa"],
+                            ["plan_and_tool", "observe_and_finish"],
+                        )
+                        self.assertEqual([skill["skill_id"] for skill in turn["skills"]], ["product_search"])
+            self.assertIn((1, 0), classes)
+            self.assertIn((2, 0), classes)
+            self.assertIn((2, 2), classes)
+            self.assertTrue(any(ca == 2 and pa > 2 for ca, pa in classes))
         finally:
             app.close()
 
