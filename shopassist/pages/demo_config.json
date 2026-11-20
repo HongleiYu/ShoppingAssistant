@@ -27,7 +27,7 @@
       "zh": "页面使用内置默认设置，忽略 SHOPASSIST 环境变量和本地设置文件。本地服务仍会读取它们。"
     },
     {
-      "en": "The page sends the sentence shown on each shortcut. Chinese questions such as 这个商品多少钱 are parsed directly. Catalog category ids such as drinkware stay in English.",
+      "en": "The page sends the sentence shown on each shortcut. Chinese questions about this item's price are parsed directly. Catalog category ids such as drinkware stay in English.",
       "zh": "快捷按钮发送的就是按钮上的那句话。这个商品多少钱这类中文问题会直接解析。目录里的品类 id 如 drinkware 仍是英文。"
     },
     {

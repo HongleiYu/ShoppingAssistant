@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import shutil
 import tempfile
 import unittest
@@ -66,6 +67,7 @@ class PagesProjectionTest(unittest.TestCase):
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
         for item in config["differences"]:
             self.assertIn(item["en"], readme)
+        self.assertIsNone(re.search(r"[\u3400-\u9fff\uf900-\ufaff]", readme))
 
     def test_in_process_matches_mcp_for_the_demo_turns(self):
         settings = load_settings(defaults_only=True)
