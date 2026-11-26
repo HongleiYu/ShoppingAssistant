@@ -56,8 +56,8 @@ def ca_answer_record(turn: dict, rendered: dict) -> dict:
 def pa_record(task: dict, outcome: dict) -> dict:
     call = outcome.get("skill_call") or {}
     action = outcome.get("action") or "step"
-    if action == "plan" and call.get("skill_id"):
-        phase = "plan_and_tool"
+    if action == "plan":
+        phase = "plan"
     elif action == "tool_call":
         phase = "observe_and_tool"
     elif action == "finish":

@@ -105,7 +105,7 @@ class RecoveryPolicyTest(unittest.TestCase):
                 clock=clock,
             )
             session.sleeper = lambda seconds, clock_: clock_.advance(seconds)
-            turn = session.user_message("Hello")
+            turn = session.user_message("What is the weather like today?")
             self.assertEqual(calls["n"], 2)
             self.assertIn("Hello", turn["reply_text"])
             self.assertGreater(session.budget.session_model_calls, 0)
@@ -123,7 +123,7 @@ class RecoveryPolicyTest(unittest.TestCase):
             )
             session = AgentSession(box, "late", mode="configured_endpoint", model_clients={"ca": client, "pa": client}, settings=settings, clock=clock)
             session.sleeper = lambda seconds, clock_: clock_.advance(seconds)
-            stopped = session.user_message("Hello")
+            stopped = session.user_message("What is the weather like today?")
             self.assertEqual(stopped["terminal"]["reason_code"], "wall_clock")
         finally:
             box.close()
@@ -156,7 +156,7 @@ class RecoveryPolicyTest(unittest.TestCase):
             client = ChatCompletionsClient(base_url="http://127.0.0.1:9/v1", model="ca", transport=transport)
             session = AgentSession(box, "auth", mode="configured_endpoint", model_clients={"ca": client, "pa": client}, settings=load_settings(environ={}), clock=clock)
             with self.assertRaises(Exception):
-                session.user_message("Hello")
+                session.user_message("What is the weather like today?")
             self.assertEqual(calls["n"], 1)
         finally:
             box.close()

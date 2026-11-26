@@ -100,6 +100,8 @@ class InProcessSandbox:
                 "embedding_dim": self.knowledge.get("embedding_dim"),
                 "encoder_version": self.knowledge.get("encoder_version"),
                 "top_k": self.knowledge.get("top_k"),
+                "max_hits": self.knowledge.get("max_hits"),
+                "dedup_cosine": self.knowledge.get("dedup_cosine"),
                 "score_threshold": self.knowledge.get("score_threshold"),
             }
         self.server = ToolServer(default_catalog(), default_kb(), profile, workspace)

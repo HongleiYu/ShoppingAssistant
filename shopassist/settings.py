@@ -31,6 +31,7 @@ DEFAULTS = {
         "max_tool_calls": 30,
         "max_model_calls": 16,
         "max_retries_per_step": 1,
+        "max_dag_concurrency": 4,
         "max_replans": 1,
         "max_fallbacks": 1,
         "repeat_limit": 1,
@@ -118,6 +119,8 @@ DEFAULTS = {
         "embedding_dim": 128,
         "encoder_version": "hash-v1",
         "top_k": 5,
+        "max_hits": 3,
+        "dedup_cosine": 0.92,
         "score_threshold": 0.2,
         "chunk_chars": 700,
         "index_version": "kb-index-v1",
@@ -153,6 +156,7 @@ _ENV_INTS = {
     "SHOPASSIST_MAX_TOOL_CALLS": "loop.max_tool_calls",
     "SHOPASSIST_MAX_MODEL_CALLS": "loop.max_model_calls",
     "SHOPASSIST_MAX_RETRIES": "loop.max_retries_per_step",
+    "SHOPASSIST_MAX_DAG_CONCURRENCY": "loop.max_dag_concurrency",
     "SHOPASSIST_MAX_REPLANS": "loop.max_replans",
     "SHOPASSIST_MAX_FALLBACKS": "loop.max_fallbacks",
     "SHOPASSIST_REPEAT_LIMIT": "loop.repeat_limit",
@@ -173,6 +177,7 @@ _ENV_INTS = {
     "SHOPASSIST_KB_SEED": "knowledge.seed",
     "SHOPASSIST_KB_DIM": "knowledge.embedding_dim",
     "SHOPASSIST_KB_TOP_K": "knowledge.top_k",
+    "SHOPASSIST_KB_MAX_HITS": "knowledge.max_hits",
     "SHOPASSIST_KB_CHUNK_CHARS": "knowledge.chunk_chars",
 }
 
@@ -184,6 +189,7 @@ _ENV_FLOATS = {
     "SHOPASSIST_CACHE_SOCKET_TIMEOUT": "cache.socket_timeout_seconds",
     "SHOPASSIST_MYSQL_CONNECT_TIMEOUT": "mysql.connect_timeout_seconds",
     "SHOPASSIST_KB_THRESHOLD": "knowledge.score_threshold",
+    "SHOPASSIST_KB_DEDUP": "knowledge.dedup_cosine",
 }
 
 _ENV_STRINGS.update(
@@ -410,6 +416,7 @@ def _validate(data: dict) -> None:
     _positive("loop.max_tool_calls", data["loop"]["max_tool_calls"], minimum=1)
     _positive("loop.max_model_calls", data["loop"]["max_model_calls"], minimum=1)
     _positive("loop.max_retries_per_step", data["loop"]["max_retries_per_step"], minimum=0)
+    _positive("loop.max_dag_concurrency", data["loop"]["max_dag_concurrency"], minimum=1)
     _positive("loop.max_replans", data["loop"]["max_replans"], minimum=0)
     _positive("loop.max_fallbacks", data["loop"]["max_fallbacks"], minimum=0)
     _positive("loop.repeat_limit", data["loop"]["repeat_limit"], minimum=0)
@@ -443,6 +450,12 @@ def _validate(data: dict) -> None:
     _positive("knowledge.product_count", knowledge["product_count"], minimum=1)
     _positive("knowledge.embedding_dim", knowledge["embedding_dim"], minimum=8)
     _positive("knowledge.top_k", knowledge["top_k"], minimum=1)
+    _positive("knowledge.max_hits", knowledge["max_hits"], minimum=1)
+    _positive("knowledge.dedup_cosine", knowledge["dedup_cosine"], minimum=0)
+    if knowledge["dedup_cosine"] > 1:
+        raise SettingsError("invalid_setting", {"path": "knowledge.dedup_cosine"})
+    if knowledge["max_hits"] > knowledge["top_k"]:
+        raise SettingsError("invalid_setting", {"path": "knowledge.max_hits"})
     _positive("knowledge.chunk_chars", knowledge["chunk_chars"], minimum=80)
     _positive("knowledge.score_threshold", knowledge["score_threshold"], minimum=0)
     if knowledge["score_threshold"] > 1:

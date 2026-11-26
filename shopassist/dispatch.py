@@ -53,10 +53,10 @@ def decide_route(features: dict, memory: dict) -> dict:
             intent,
             True,
             skill_id="knowledge_retrieve",
-            skill_args={"query": features.get("kb_query") or "", "corpus": "policy"},
+            skill_args=_kb_args(features, memory, "policy"),
         )
     if intent == "knowledge_product":
-        args = {"query": features.get("kb_query") or "", "corpus": "product"}
+        args = _kb_args(features, memory, "product")
         budget = _value(memory, features, "budget")
         if budget is not None:
             args["max_price"] = budget
@@ -157,6 +157,16 @@ def _missing_slots(intent: str, features: dict, memory: dict) -> list[str]:
     if intent == "add_color" and _value(memory, features, "color") is None:
         missing.append("color")
     return missing
+
+
+def _kb_args(features: dict, memory: dict, corpus: str) -> dict:
+    args = {"query": features.get("kb_query") or "", "corpus": corpus}
+    product_ids = list(features.get("product_ids") or [])
+    if len(product_ids) == 1:
+        args["product_id"] = product_ids[0]
+    elif features.get("use_current_product") and memory.get("consulted_product_id"):
+        args["product_id"] = memory["consulted_product_id"]
+    return args
 
 
 def build_query(features: dict, memory: dict) -> dict:

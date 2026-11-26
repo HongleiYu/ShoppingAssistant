@@ -159,6 +159,10 @@ def project_turn(turn: dict, *, request_id: str, duration_ms: float) -> dict:
         "token_usage_reason": "unavailable_for_mock",
         "mcp_process": False,
         "model_invocations": _public_invocations(turn.get("model_invocations") or []),
+        "rule": turn.get("rule"),
+        "dag_waves": list(turn.get("dag_waves") or []),
+        "tool_count": len(tools),
+        "retry_count": sum(1 for item in (turn.get("recovery") or []) if item.get("strategy") == "retry"),
         "display_cards": _display_cards(turn, _cards(turn)),
         "presentation": _presentation(turn.get("model_invocations") or [], [
             {

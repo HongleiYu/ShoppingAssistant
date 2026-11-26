@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import time
+from concurrent.futures import ThreadPoolExecutor
 
 from shopassist.communication import prepare_turn, task_from_decision
 from shopassist.config import ConfigError
@@ -25,7 +26,17 @@ from shopassist.model_runtime import (
 )
 from shopassist.constraints import clone_memory, empty_memory
 from shopassist.context_engine import ContextEngine
-from shopassist.planner_policy import PlanRegistry, act, new_planner_state, resolve_arguments
+from shopassist.faq_rules import match_faq
+from shopassist.plan_dag import validate_dag
+from shopassist.planner_policy import (
+    PlanRegistry,
+    _conclude,
+    act,
+    alternative_plan,
+    browse_plan,
+    new_planner_state,
+    resolve_arguments,
+)
 from shopassist.progress import CancelledTurn, milestone_for
 from shopassist.reply_render import (
     render_clarification,
@@ -163,12 +174,26 @@ class AgentSession:
             self.budget.cancel_event = self.cancel_event
             self.budget.recovery_settings = self.settings
             self.budget.rng = self._rng
+            faq = match_faq(text)
+            if faq is not None:
+                return self._faq_turn(text, faq)
             if self.mode == "configured_endpoint":
                 return self._model_message(text)
             return self._mock_message(text)
         finally:
             self.on_progress = None
             self._invocation_turn = None
+
+    def _faq_turn(self, text: str, decision: dict) -> dict:
+        memory_before = clone_memory(self.memory)
+        turn = self._blank_turn(text, memory_before, decision)
+        turn["rule"] = {"kind": "faq", "intent": decision.get("intent"), "model_calls": 0}
+        self._invocation_turn = turn
+        if decision["route"] == "simple_skill":
+            rendered = self._simple_skill(decision, turn)
+        else:
+            rendered = render_direct(decision.get("intent") or "capabilities")
+        return self._commit(text, turn, rendered)
 
     def _mock_message(self, text: str) -> dict:
         memory_before = clone_memory(self.memory)
@@ -558,6 +583,7 @@ class AgentSession:
 
     def _finish_handoff(self, turn, task_id, outcome, state, plans) -> dict:
         turn["planner_actions"] = _public_planner_actions(plans)
+        turn["dag_waves"] = list(state.get("waves") or [])
         terminal = outcome.get("terminal") or stop_terminal("step_budget")
         if terminal.get("reason_code") == "cancelled":
             raise CancelledTurn()
@@ -614,6 +640,8 @@ class AgentSession:
             "max_retries_per_step": loop["max_retries_per_step"],
             "max_replans": loop["max_replans"],
             "max_fallbacks": loop["max_fallbacks"],
+            "max_plan_steps": loop["max_plan_steps"],
+            "max_dag_concurrency": loop["max_dag_concurrency"],
         }
 
     def _decide(self, task: dict, state: dict) -> dict:
@@ -840,106 +868,241 @@ class AgentSession:
 
 
 def _run_planner(task, sandbox, registry: PlanRegistry, decide, budget: Budget, limits: dict, initial_state=None, emit=None, cancelled=None, tool_timeout=2.0):
+    del registry
     state = initial_state or new_planner_state()
     state["limits"] = limits
+    state.setdefault("retries", {})
+    state.setdefault("blocked", set())
+    state.setdefault("waves", [])
     public_steps = []
-    outcome = None
-    while True:
+    if cancelled:
+        try:
+            cancelled()
+        except CancelledTurn:
+            return _stopped_outcome("cancelled"), state, public_steps
+    reason = budget.before_plan_step(will_call_model=bool(getattr(budget, "charge_model_calls", False)))
+    if reason:
+        return _stopped_outcome(reason, partial_ids(state)), state, public_steps
+    budget.note_plan_step()
+    outcome = decide(task, state)
+    public_steps.append(
+        {
+            "action": outcome.get("action"),
+            "skill_call": _public_call(outcome.get("skill_call")),
+            "recovery": outcome.get("recovery"),
+            "failure": outcome.get("failure"),
+        }
+    )
+    action = outcome.get("action")
+    if action == "ask_user":
+        missing = list((outcome.get("ask") or {}).get("missing") or ["request"])
+        outcome["terminal"] = {"status": "WAITING_USER", "reason_code": "ask_user", "missing": missing}
+        return outcome, state, public_steps
+    if action == "fail":
+        outcome["terminal"] = classify_failure(outcome, state)
+        return outcome, state, public_steps
+    plan = outcome.get("plan") if action == "plan" else None
+    max_nodes = int(limits.get("max_plan_steps") or 8)
+    if isinstance(plan, list) and len(plan) > max_nodes:
+        return _stopped_outcome("step_budget"), state, public_steps
+    errors = validate_dag(plan, max_nodes=max_nodes)
+    if errors:
+        stopped = _stopped_outcome("invalid_plan")
+        stopped["failure"]["limitations"].append({"code": "invalid_plan", "errors": errors})
+        return stopped, state, public_steps
+    state["plan"] = plan
+    finished, extra = _execute_dag(task, state, sandbox, budget, limits, emit, cancelled, tool_timeout)
+    public_steps.extend(extra)
+    return finished, state, public_steps
+
+
+def _execute_dag(task, state, sandbox, budget, limits, emit, cancelled, tool_timeout):
+    from shopassist.recovery import choose, delay_seconds, wait_bounded
+
+    public = []
+    concurrency = max(1, int(limits.get("max_dag_concurrency") or 4))
+    for _guard in range(40):
         if cancelled:
             try:
                 cancelled()
             except CancelledTurn:
-                return _stopped_outcome("cancelled"), state, public_steps
-        reason = budget.before_plan_step(will_call_model=bool(getattr(budget, "charge_model_calls", False)))
-        if reason:
-            stopped = _stopped_outcome(reason, partial_ids(state))
-            return stopped, state, public_steps
-        budget.note_plan_step()
-        outcome = decide(task, state)
-        public_steps.append(
-            {
-                "action": outcome.get("action"),
-                "skill_call": _public_call(outcome.get("skill_call")),
-                "recovery": outcome.get("recovery"),
-                "failure": outcome.get("failure"),
-            }
-        )
-        action = outcome.get("action")
-        if action == "finish":
-            verdict = validate_finish(task, state, outcome)
-            outcome["terminal"] = verdict["terminal"]
-            outcome["result"] = verdict["result"]
-            outcome["failure"] = verdict["failure"]
-            return outcome, state, public_steps
-        if action == "ask_user":
-            missing = list((outcome.get("ask") or {}).get("missing") or ["request"])
-            outcome["terminal"] = {"status": "WAITING_USER", "reason_code": "ask_user", "missing": missing}
-            return outcome, state, public_steps
-        if action == "fail":
-            outcome["terminal"] = classify_failure(outcome, state)
-            return outcome, state, public_steps
-        call = outcome.get("skill_call") or {}
-        if not call.get("skill_id"):
-            outcome["terminal"] = {"status": "FAILED", "reason_code": "missing_skill_call"}
-            return outcome, state, public_steps
-        if call["skill_id"] == "budget_attribute_validate":
-            arguments = resolve_arguments(
-                {
-                    "skill_id": call["skill_id"],
-                    "depends_on": _depends(state, call["step_id"]),
-                    "arguments": call.get("arguments") or {},
-                },
-                state,
-                task,
-            )
-        else:
-            arguments = dict(call.get("arguments") or {})
-        spec = _spec(sandbox, call["skill_id"])
-        idempotent = True if spec is None else bool(getattr(spec, "idempotent", True))
-        uses_tools = bool(spec and getattr(spec, "allowed_tools", ()))
-        blocked = budget.repeat_block(call["skill_id"], arguments, idempotent=idempotent)
-        if blocked:
-            return _stopped_outcome(blocked, partial_ids(state)), state, public_steps
-        tool_reason = budget.before_tool_call(uses_tools=uses_tools)
-        if tool_reason:
-            return _stopped_outcome(tool_reason, partial_ids(state)), state, public_steps
-        timeout = budget.call_timeout(tool_timeout)
-        if timeout is None:
-            return _stopped_outcome("wall_clock", partial_ids(state)), state, public_steps
-        if action == "retry":
-            from shopassist.recovery import delay_seconds, wait_bounded
-
-            settings = getattr(budget, "recovery_settings", None)
-            if settings is not None:
-                seconds = delay_seconds(0, None, settings, getattr(budget, "rng", None) or __import__("random").Random(0))
-                waited = wait_bounded(seconds, budget, getattr(budget, "cancel_event", None), getattr(budget, "sleeper", None))
-                if waited:
-                    return _stopped_outcome(waited, partial_ids(state)), state, public_steps
+                return _stopped_outcome("cancelled"), public
+        if _branch_oos(task, state, public):
+            continue
+        ready = _ready_nodes(state)
+        if not ready:
+            return _close_plan(task, state), public
+        wave = ready[:concurrency]
+        state["waves"].append([step["step_id"] for step in wave])
         if emit:
-            emit(call["skill_id"])
-        try:
-            result = sandbox.invoke(call["skill_id"], arguments, timeout=timeout)
-        except TimeoutError:
-            result = {"skill_id": call["skill_id"], "status": "timeout", "items": [], "facts": [], "evidence": [], "tool_trace": [], "untrusted_text": []}
-        budget.note_tool_result(call["skill_id"], arguments, result)
-        data = result.get("data") if isinstance(result.get("data"), dict) else {}
-        state["observations"].append(
-            {
-                "step_id": call.get("step_id"),
-                "skill_id": result.get("skill_id", call["skill_id"]),
-                "version": result.get("version"),
-                "status": result.get("status"),
-                "error_code": data.get("error_code"),
-                "items": result.get("items") or [],
-                "facts": result.get("facts") or [],
-                "evidence": result.get("evidence") or [],
-                "arguments": arguments,
-                "tool_trace": result.get("tool_trace") or [],
-                "untrusted_text": result.get("untrusted_text") or [],
-                "handled": False,
-                "recorded": False,
-            }
-        )
+            for step in wave:
+                emit(step["skill_id"])
+        prepared = []
+        for step in wave:
+            payload = _prepare_node(step, task, state, sandbox, budget, tool_timeout)
+            if payload.get("stopped"):
+                return payload["stopped"], public
+            prepared.append(payload)
+        # One stdio MCP process cannot multiplex responses. Overlap tool
+        # reads only on the in-process gateway, which locks its own counters.
+        parallel = len(prepared) > 1 and getattr(sandbox, "process", None) is None
+        if parallel:
+            with ThreadPoolExecutor(max_workers=len(prepared)) as pool:
+                invoked = list(pool.map(_invoke_prepared, prepared))
+        else:
+            invoked = [_invoke_prepared(payload) for payload in prepared]
+        for payload in invoked:
+            if payload.get("stopped"):
+                return payload["stopped"], public
+            result = payload["result"]
+            arguments = payload["arguments"]
+            step = payload["step"]
+            data = result.get("data") if isinstance(result.get("data"), dict) else {}
+            state["observations"].append(
+                {
+                    "step_id": step["step_id"],
+                    "skill_id": result.get("skill_id", step["skill_id"]),
+                    "version": result.get("version"),
+                    "status": result.get("status"),
+                    "error_code": data.get("error_code"),
+                    "items": result.get("items") or [],
+                    "facts": result.get("facts") or [],
+                    "evidence": result.get("evidence") or [],
+                    "arguments": arguments,
+                    "tool_trace": result.get("tool_trace") or [],
+                    "untrusted_text": result.get("untrusted_text") or [],
+                    "handled": False,
+                    "recorded": False,
+                }
+            )
+            budget.note_tool_result(step["skill_id"], arguments, result)
+            if result.get("status") in {"ok", "empty"}:
+                continue
+            decision = choose(
+                status=result.get("status"),
+                error_code=data.get("error_code"),
+                skill_id=step["skill_id"],
+                goal_type=task.get("goal_type"),
+                attempt=state["retries"].get(step["step_id"], 0),
+                fallback_count=state.get("fallback_count", 0),
+                replan_count=state.get("replan_count", 0),
+                limits=limits,
+                idempotent=payload["idempotent"],
+            )
+            recovery_action = decision["action"]
+            if recovery_action == "retry":
+                state["retries"][step["step_id"]] = state["retries"].get(step["step_id"], 0) + 1
+                public.append({"action": "retry", "skill_call": _public_call({"step_id": step["step_id"], "skill_id": step["skill_id"]}), "recovery": {"strategy": "retry", "because_code": decision["reason"]}, "failure": None})
+                settings = getattr(budget, "recovery_settings", None)
+                if settings is not None:
+                    seconds = delay_seconds(0, None, settings, getattr(budget, "rng", None) or __import__("random").Random(0))
+                    waited = wait_bounded(seconds, budget, getattr(budget, "cancel_event", None), getattr(budget, "sleeper", None))
+                    if waited:
+                        return _stopped_outcome(waited), public
+                continue
+            if recovery_action == "refresh":
+                state["retries"][step["step_id"]] = state["retries"].get(step["step_id"], 0) + 1
+                step["arguments"] = dict(step.get("arguments") or {})
+                step["arguments"]["fresh"] = True
+                public.append({"action": "retry", "skill_call": _public_call({"step_id": step["step_id"], "skill_id": step["skill_id"]}), "recovery": {"strategy": "retry", "because_code": "stale"}, "failure": None})
+                continue
+            if recovery_action == "cached_fallback":
+                state["fallback_count"] = state.get("fallback_count", 0) + 1
+                step["arguments"] = dict(step.get("arguments") or {})
+                step["arguments"]["backend"] = "cached"
+                public.append({"action": "fallback", "skill_call": _public_call({"step_id": step["step_id"], "skill_id": step["skill_id"]}), "recovery": {"strategy": "fallback", "because_code": "error"}, "failure": None})
+                continue
+            if recovery_action == "replan":
+                state["replan_count"] = state.get("replan_count", 0) + 1
+                state["plan"] = browse_plan(task)
+                public.append({"action": "replan", "skill_call": None, "recovery": {"strategy": "replan", "because_code": "malformed"}, "failure": None})
+                continue
+            state["blocked"].add(step["step_id"])
+            if recovery_action == "escalate":
+                failed = _conclude(task, state)
+                failed["action"] = "fail"
+                failed["failure"] = {"reason_code": "conflicting_evidence", "escalate": True, "limitations": [{"code": "conflicting_evidence"}]}
+                failed["terminal"] = {"status": "ESCALATED", "reason_code": "conflicting_evidence"}
+                public.append({"action": "fail", "skill_call": None, "recovery": {"strategy": "escalate_human", "because_code": "conflict"}, "failure": failed["failure"]})
+                return failed, public
+    return _stopped_outcome("step_budget"), public
+
+
+def _close_plan(task, state):
+    finished = _conclude(task, state)
+    if finished.get("action") == "finish":
+        verdict = validate_finish(task, state, finished)
+        finished["terminal"] = verdict["terminal"]
+        finished["result"] = verdict["result"]
+        finished["failure"] = verdict["failure"]
+        return finished
+    finished["terminal"] = classify_failure(finished, state)
+    return finished
+
+
+def _branch_oos(task, state, public) -> bool:
+    if task.get("goal_type") != "oos" or state.get("oos_branched"):
+        return False
+    for obs in state["observations"]:
+        if obs.get("skill_id") == "product_quote" and obs.get("status") == "ok" and obs.get("items"):
+            stock = int(obs["items"][0].get("stock") or 0)
+            if stock <= 0:
+                state["oos_branched"] = True
+                state["plan"] = alternative_plan(task)
+                public.append({"action": "fallback", "skill_call": None, "recovery": {"strategy": "fallback", "because_code": "out_of_stock"}, "failure": None})
+                return True
+    return False
+
+
+def _ready_nodes(state) -> list[dict]:
+    latest = {}
+    for obs in state["observations"]:
+        latest[obs["step_id"]] = obs
+    done = {step_id for step_id, obs in latest.items() if obs.get("status") in {"ok", "empty"}}
+    blocked = state["blocked"]
+    ready = []
+    for step in state["plan"]:
+        step_id = step["step_id"]
+        if step_id in done or step_id in blocked:
+            continue
+        deps = list(step.get("depends_on") or [])
+        if any(dep in blocked for dep in deps):
+            blocked.add(step_id)
+            continue
+        if all(dep in done for dep in deps):
+            ready.append(step)
+    ready.sort(key=lambda item: item["step_id"])
+    return ready
+
+
+def _prepare_node(step, task, state, sandbox, budget, tool_timeout):
+    if step["skill_id"] == "budget_attribute_validate":
+        arguments = resolve_arguments(step, state, task)
+    else:
+        arguments = dict(step.get("arguments") or {})
+    spec = _spec(sandbox, step["skill_id"])
+    idempotent = True if spec is None else bool(getattr(spec, "idempotent", True))
+    uses_tools = bool(spec and getattr(spec, "allowed_tools", ()))
+    blocked = budget.repeat_block(step["skill_id"], arguments, idempotent=idempotent)
+    if blocked:
+        return {"stopped": _stopped_outcome(blocked, partial_ids(state))}
+    tool_reason = budget.before_tool_call(uses_tools=uses_tools)
+    if tool_reason:
+        return {"stopped": _stopped_outcome(tool_reason, partial_ids(state))}
+    timeout = budget.call_timeout(tool_timeout)
+    if timeout is None:
+        return {"stopped": _stopped_outcome("wall_clock", partial_ids(state))}
+    return {"stopped": None, "step": step, "arguments": arguments, "timeout": timeout, "idempotent": idempotent, "sandbox": sandbox}
+
+
+def _invoke_prepared(payload):
+    step = payload["step"]
+    try:
+        result = payload["sandbox"].invoke(step["skill_id"], payload["arguments"], timeout=payload["timeout"])
+    except TimeoutError:
+        result = {"skill_id": step["skill_id"], "status": "timeout", "items": [], "facts": [], "evidence": [], "tool_trace": [], "untrusted_text": []}
+    return {"stopped": None, "step": step, "result": result, "arguments": payload["arguments"], "idempotent": payload["idempotent"]}
+
 
 def _stopped_outcome(reason: str, partial=None) -> dict:
     return {

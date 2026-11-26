@@ -156,28 +156,28 @@
         "prod-shoes-court"
       ],
       "calls": {
-        "ca": 1,
+        "ca": 0,
         "pa": 0
       },
       "purpose": {
-        "en": "Ask what this shop demo can answer, with no catalog tool.",
-        "zh": "询问这个店铺演示能回答什么，不查商品工具。"
+        "en": "Ask what this shop demo can answer. A rule answers this exact question with no model call.",
+        "zh": "询问这个店铺演示能回答什么。这句示例由规则回答，不会调用模型。"
       },
       "samples": {
         "en": "What can you help with?",
         "zh": "你能帮什么忙？"
       },
       "limits": {
-        "en": "This example is one communication-agent decision. It does not call the planner.",
-        "zh": "这个示例只有一次沟通代理决策，不会调用规划代理。"
+        "en": "This example matches a FAQ rule. It does not call the communication agent or the planner.",
+        "zh": "这个示例命中常见问题规则，不会调用沟通代理或规划代理。"
       },
       "welcome": {
         "en": "This conversation asks what the shop demo can answer. No catalog lookup runs until you ask for an item.",
         "zh": "这次对话是问这个店铺演示能回答什么。你不问具体商品，就不会查目录。"
       },
       "context_note": {
-        "en": "The example question is one simulated communication-agent call.",
-        "zh": "示例问题是一次模拟沟通代理调用。"
+        "en": "The example question is a rule match, not a model call.",
+        "zh": "示例问题是规则命中，不是模型调用。"
       },
       "suggestions": {
         "en": [
@@ -237,27 +237,27 @@
       ],
       "calls": {
         "ca": 2,
-        "pa": 2
+        "pa": 1
       },
       "purpose": {
-        "en": "Browse drinkware under 20. The planner requests one search, then finishes from that result.",
-        "zh": "浏览 20 以内的 drinkware。规划代理先请求一次检索，再根据结果结束。"
+        "en": "Browse drinkware under 20. One planner call returns a search step. The runtime runs that search.",
+        "zh": "浏览 20 以内的 drinkware。规划代理一次返回检索步骤，运行时执行这次检索。"
       },
       "samples": {
         "en": "browse drinkware under 20",
         "zh": "浏览 drinkware，20以内"
       },
       "limits": {
-        "en": "The example uses two planner calls: plan and request the search, then observe and finish. It does not run the extra budget check.",
-        "zh": "示例是两次规划代理调用：先规划并请求检索，再观察结果并结束。不会再跑额外的预算核对。"
+        "en": "The example uses one planner call. The plan is a single search. It does not run the extra budget check, and it does not call the planner again.",
+        "zh": "示例只调用一次规划代理。计划里只有一次检索，不会再做预算核对，也不会再次调用规划代理。"
       },
       "welcome": {
         "en": "This conversation browses drinkware under 20. Ask when you want the search. Only this mug is open until results arrive.",
         "zh": "这次对话浏览 20 以内的 drinkware。你发问之后才会检索。结果出来之前只打开这一只杯子。"
       },
       "context_note": {
-        "en": "Example model calls: communication agent 2, planner 2.",
-        "zh": "示例模型调用：沟通代理 2 次，规划代理 2 次。"
+        "en": "Example model calls: communication agent 2, planner 1.",
+        "zh": "示例模型调用：沟通代理 2 次，规划代理 1 次。"
       },
       "suggestions": {
         "en": [
@@ -306,7 +306,7 @@
       },
       "calls": {
         "ca": 2,
-        "pa": 3
+        "pa": 1
       }
     },
     {
@@ -346,7 +346,7 @@
       },
       "calls": {
         "ca": 2,
-        "pa": 4
+        "pa": 1
       }
     },
     {
@@ -356,8 +356,8 @@
         "prod-shoes-court"
       ],
       "purpose": {
-        "en": "Read the current return window while viewing the canvas court shoes.",
-        "zh": "在查看这双帆布鞋时读取现行退货时限。"
+        "en": "Read the current return window from the policy tool. This exact question matches a rule and does not call a model.",
+        "zh": "用政策工具读取现行退货时限。这句示例命中规则，不会调用模型。"
       },
       "samples": {
         "en": "What is the return window?",
@@ -384,7 +384,7 @@
         ]
       },
       "calls": {
-        "ca": 2,
+        "ca": 0,
         "pa": 0
       }
     },
@@ -605,7 +605,10 @@
       "call_note": "These counts are for the example question on the card, not a guarantee for a later message.",
       "sim_ca": "Simulated CA calls",
       "sim_total": "Total model calls",
-      "sim_network": "Network model calls"
+      "sim_network": "Network model calls",
+      "tool_count": "Tool calls",
+      "retry_count": "Tool retries",
+      "rule": "Rule"
     },
     "zh": {
       "title": "演示旗舰店",
@@ -705,7 +708,10 @@
       "call_note": "这些次数只对卡片上的示例问题，不是之后任意输入的保证。",
       "sim_ca": "模拟沟通代理次数",
       "sim_total": "模型调用合计",
-      "sim_network": "网络模型调用"
+      "sim_network": "网络模型调用",
+      "tool_count": "工具调用",
+      "retry_count": "工具重试",
+      "rule": "规则"
     }
   },
   "stream": {

@@ -179,6 +179,8 @@ def handle_shipment_lookup(arguments: dict, call) -> dict:
 
 def handle_knowledge_retrieve(arguments: dict, call) -> dict:
     payload = {"query": arguments.get("query") or "", "corpus": arguments.get("corpus") or ""}
+    if arguments.get("product_id"):
+        payload["product_id"] = arguments["product_id"]
     if arguments.get("top_k") is not None:
         payload["top_k"] = int(arguments["top_k"])
     if arguments.get("threshold") is not None:
