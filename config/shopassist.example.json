@@ -8,6 +8,7 @@
     "max_tool_calls": 30,
     "max_model_calls": 16,
     "max_retries_per_step": 1,
+    "max_dag_concurrency": 4,
     "max_replans": 1,
     "max_fallbacks": 1,
     "repeat_limit": 1,
@@ -57,6 +58,8 @@
     "embedding_dim": 128,
     "encoder_version": "hash-v1",
     "top_k": 5,
+    "max_hits": 3,
+    "dedup_cosine": 0.92,
     "score_threshold": 0.2,
     "chunk_chars": 700,
     "index_version": "kb-index-v1"

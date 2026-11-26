@@ -185,7 +185,7 @@ class ProductEntryTest(unittest.TestCase):
             self.assertEqual(again["display_cards"], [])
             search = app.turn("find drinkware under 20")
             self.assertEqual(search["model_invocations"][0]["output"]["route"], "complex_handoff")
-            self.assertTrue(any(item["agent"] == "pa" and item["phase"] == "plan_and_tool" for item in search["model_invocations"]))
+            self.assertEqual(sum(1 for item in search["model_invocations"] if item["agent"] == "pa" and item["phase"] == "plan"), 1)
             self.assertEqual(search["model_invocations"][-1]["phase"], "answer")
             self.assertEqual(
                 [card["product_id"] for card in search["display_cards"]],
@@ -252,16 +252,12 @@ class ProductEntryTest(unittest.TestCase):
                     self.assertEqual(ca + pa, len(invocations))
                     self.assertTrue(all(item["simulated"] and item["network"] is False for item in invocations))
                     classes.add((ca, pa))
-                    if pa == 2:
-                        self.assertEqual(
-                            [item["phase"] for item in invocations if item["agent"] == "pa"],
-                            ["plan_and_tool", "observe_and_finish"],
-                        )
-                        self.assertEqual([skill["skill_id"] for skill in turn["skills"]], ["product_search"])
-            self.assertIn((1, 0), classes)
+                    if pa:
+                        self.assertEqual([item["phase"] for item in invocations if item["agent"] == "pa"], ["plan"])
+            self.assertIn((0, 0), classes)
             self.assertIn((2, 0), classes)
-            self.assertIn((2, 2), classes)
-            self.assertTrue(any(ca == 2 and pa > 2 for ca, pa in classes))
+            self.assertIn((2, 1), classes)
+            self.assertFalse(any(pa > 1 for _ca, pa in classes))
         finally:
             app.close()
 

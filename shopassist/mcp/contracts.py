@@ -226,7 +226,7 @@ TOOL_SPECS = {
         "description": "Rank fictional knowledge chunks. The default score is a hashing baseline, not a semantic embedding.",
         "input": {
             "required": ["query"],
-            "properties": {"query": "str", "corpus": "str", "top_k": "int", "threshold": "number"},
+            "properties": {"query": "str", "corpus": "str", "top_k": "int", "threshold": "number", "product_id": "str"},
         },
         "validate_output": validate_retrieve_result,
     },

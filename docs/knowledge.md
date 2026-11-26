@@ -24,7 +24,9 @@ python -m shopassist.cli build-index --corpus data/synthetic_kb --output data/kb
 
 The directory contains `manifest.json`, `chunks.jsonl`, `vectors.f32` (little-endian float32), and `catalog.json`. Policy sections become chunks. Each product is one stable record. A second build with the same inputs writes the same bytes. Building again from a smaller catalog removes the missing ids instead of leaving duplicates.
 
-The default encoder is `hashing_lexical_baseline`. A hit must contain a rare query token, and the score is a hashing cosine. The manifest says `semantic: false` and `score_kind: hashing_cosine`.
+The default encoder is `hashing_lexical_baseline`. A hit must contain a rare query token, and the score is a hashing cosine. The manifest says `semantic: false` and `score_kind: hashing_cosine`. That score is a lexical approximation, not a semantic embedding.
+
+Retrieval keeps the original query, then adds a small set of lexical aliases such as `refund` to `return`. Those aliases widen the token gate. They do not change the encoder into a semantic model. If a product id is supplied, product-scoped chunks are filtered to that id before ranking. Global policy chunks stay eligible. Another product's chunk does not. Near-duplicate chunks are collapsed with `knowledge.dedup_cosine`. Hits below `knowledge.score_threshold` are dropped. The result is capped by `knowledge.max_hits` (default 3) and is never padded with weaker hits.
 
 To try a local semantic model, set `knowledge.encoder` to `sentence_transformers` and `knowledge.embedding_model` to a local model id, then rebuild. The command fails if that package or model is absent. It does not fall back to hashing. This checkout did not run that model.
 
@@ -35,7 +37,7 @@ python -m shopassist.cli retrieve --query "会员积分" --corpus policy
 python -m shopassist.cli retrieve --query "harbor linen napkin" --corpus product
 ```
 
-`top_k` defaults to 5 and `score_threshold` defaults to 0.2. An unknown token returns status `empty` and error code `no_match`. If the encoder dimension, model id, or version does not match the manifest, retrieval raises `index_mismatch`.
+`top_k` defaults to 5, `max_hits` defaults to 3, and `score_threshold` defaults to 0.2. An unknown token returns status `empty` and error code `no_match`. If the encoder dimension, model id, or version does not match the manifest, retrieval raises `index_mismatch`.
 
 ## Runtime
 

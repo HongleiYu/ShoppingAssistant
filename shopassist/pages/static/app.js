@@ -439,6 +439,9 @@ function traceNodes(turn) {
   addRow(root, t().sim_pa, String(paCount), "sim-pa");
   addRow(root, t().sim_total, String(caCount + paCount), "sim-total");
   addRow(root, t().sim_network, String(networkCount), "sim-network");
+  if (turn.rule) addRow(root, t().rule, `${turn.rule.kind} · ${turn.rule.intent || ""}`, "rule");
+  addRow(root, t().tool_count, String(turn.tool_count != null ? turn.tool_count : (turn.tools || []).length), "tool-count");
+  addRow(root, t().retry_count, String(turn.retry_count || 0), "retry-count");
   addRow(root, t().model, turn.simulated_model ? t().model_simulated : (turn.model_called ? "called" : t().model_no));
   invocations.forEach((call, index) => {
     const line = document.createElement("p");

@@ -34,9 +34,9 @@ CA_INSTRUCTIONS = (
 
 PA_INSTRUCTIONS = (
     "You are the planner agent. Return one JSON object and no hidden reasoning. "
-    "Choose the next action, plan, and skill_call. Use only the skills product_search, "
-    "product_quote, product_compare, and budget_attribute_validate. "
-    "Do not invent catalog facts."
+    "Return action plan and a complete tool DAG in plan. Do not return a single next step. "
+    "Use only the skills product_search, product_quote, product_compare, and budget_attribute_validate. "
+    "Do not invent catalog facts. The runtime executes the DAG and will not call you again."
 )
 
 

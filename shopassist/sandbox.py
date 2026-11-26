@@ -80,6 +80,8 @@ class SessionSandbox:
                 "embedding_dim": self.knowledge.get("embedding_dim"),
                 "encoder_version": self.knowledge.get("encoder_version"),
                 "top_k": self.knowledge.get("top_k"),
+                "max_hits": self.knowledge.get("max_hits"),
+                "dedup_cosine": self.knowledge.get("dedup_cosine"),
                 "score_threshold": self.knowledge.get("score_threshold"),
             }
         profile_path.write_text(json.dumps(profile, sort_keys=True), encoding="utf-8")

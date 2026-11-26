@@ -27,86 +27,47 @@ This repository is a demonstration. The curated corpus is not enough to train a 
 
 ## Flow
 
-A shopper sentence is one turn. Two kinds of work happen on that turn, and they are not the same thing.
-
-- A **model invocation** is a decision by the communication agent or the planner. On the public page these decisions are simulated and labeled. On a configured local server they are HTTP calls to the endpoint you opted in.
-- A **tool call** is a skill reading the synthetic catalog, a policy note, or a shipment snapshot. The tool returns evidence. It is not a model invocation, and it is not counted in the call totals below.
-
-The communication agent does not invent a price, a stock count, or a policy number. The shopper-facing sentence is rendered from tool evidence and then checked by the evidence gate. Neither agent has a hidden reasoning field in the trace.
-
-### Communication agent
-
-The communication agent reads the sentence and chooses one route:
-
-1. Answer directly. A capability question and a short thanks take this route. No tool runs, and the planner does not start.
-2. Ask for a missing detail, or say that this demo does not support the sentence. No tool runs, and the planner does not start.
-3. Call one skill. A price or stock quote, a return window, a shipment lookup, and a knowledge lookup take this route.
-4. Hand a multi-step shopping task to the planner.
-5. Escalate to a person when the shopper asks for one, or when tool evidence conflicts.
-
-Routes 1, 2, and 5 are communication-agent only. Route 3 is still communication-agent only: one skill runs, and the planner is not called. Route 4 is the only path that starts the planner.
-
-### Planner agent
-
-The planner runs only after a handoff. It keeps a short plan. A later step can depend on an earlier observation. Each planner invocation does one of these:
-
-1. Build the plan and request the first ready skill.
-2. After that skill returns, request the next ready skill. This happens only when the plan still has a step waiting on the observation.
-3. When no step is waiting, finish from the observations.
-
-The runtime then executes the requested skill. The skill's result is an observation for the next planner invocation. The communication agent writes the shopper-facing sentence after the planner finishes.
-
-### Communication agent only
+A shopper sentence is one turn. Three layers can handle it, and only the first match runs.
 
 ```mermaid
 flowchart TD
-  shopper[Shopper sentence] --> ca[CA chooses a route]
-  ca -->|direct answer or clarification| once[One combined CA record]
-  ca -->|one skill| tool[Skill reads the snapshot]
-  tool --> answer[CA writes the reply from that evidence]
+  shopper[Shopper sentence] --> rule[FAQ rule]
+  rule -->|exact match| reply[Grounded reply]
+  rule -->|no match| ca[Communication agent]
+  ca -->|direct answer or one skill| reply
+  ca -->|complex task| pa[Planner, one call]
+  pa --> dag[Validated tool DAG]
+  dag --> reply
 ```
 
-A direct answer or a clarification is one recorded communication-agent call. The sentence is included in that same record. There is no second call just to render it.
+1. **FAQ rule.** A small list of exact sentences, such as "What can you help with?" and "What is the return window?", is answered with no communication-agent call and no planner call. The return-window rule still reads the policy tool. The rule does not invent a price or a stock count. A bare "Hello" is not on this list.
+2. **Communication agent (CA).** Anything else goes to the communication agent. A price or stock question is one skill around the snapshot, recorded as two simulated communication-agent steps on the public page: request the skill, then write the reply from the tool result. The tool itself is not a model call. An unrecognized sentence is one communication-agent clarification and uses the fixed unsupported-demo sentence.
+3. **Planner agent (PA), once.** A search, browse, or compare is a handoff. The planner is called once and must return a complete tool DAG. The runtime validates that DAG and executes it. It does not call the planner again to observe, finish, or replan.
 
-A one-skill turn is two recorded communication-agent calls. The first requests the skill. The tool runs. The second writes the reply from the tool result. That second record is the evidence renderer. On the public page it is labeled as a simulated communication-agent step. It is not a second network request, and the tool between the two records is not a model call.
+A **model invocation** is a communication-agent or planner decision. A **tool call** reads the synthetic snapshot. A tool retry is counted separately. The default retry limit is one extra attempt, so a transient failure may run twice. Permanent auth failures and non-idempotent calls are not retried. A plan with more nodes than `loop.max_plan_steps` stops as `step_budget`. An invalid DAG stops as `invalid_plan`. Neither case calls the planner a second time.
 
-### Communication agent and planner
+| Example | What runs | CA | PA |
+| --- | --- | --- | --- |
+| What can you help with? | FAQ rule, no tool | 0 | 0 |
+| What is the return window? | FAQ rule, then the policy tool | 0 | 0 |
+| How much is this item? | CA requests a quote, the snapshot tool runs, CA writes the reply | 2 | 0 |
+| browse drinkware under 20 | CA hands off. One planner call returns a single search. The runtime runs it. | 2 | 1 |
+| find drinkware under 20 | One planner call returns search, then the budget check that filters those items. The check calls no catalog tool. | 2 | 1 |
+| compare the two mugs | One planner call returns two quotes, which can run in one wave, then the compare. | 2 | 1 |
 
-```mermaid
-flowchart TD
-  shopper[Shopper sentence] --> ca[CA hands the task off]
-  ca --> pa[PA requests the next skill]
-  pa --> tool[Runtime runs that skill]
-  tool --> next{Another step is ready?}
-  next -->|yes| pa
-  next -->|no| finish[PA finishes from the observations]
-  finish --> answer[CA writes the reply]
-```
+These counts are for the example question on the card. A later sentence can take a different route. The public page records them as simulated calls inside the browser. Network model calls on that page are zero.
 
-The communication agent is recorded twice: the handoff, and the final reply. The planner count is the number of times it actually decides. A skill that runs between those decisions is not another model invocation. Some of those skills call a snapshot tool. The budget check does not: it only filters items the search already returned.
-
-### Four example classes
-
-These counts are for the example question on the matching scenario card. A later sentence in the same conversation can take a different route. Each card also has a Chinese example. That example takes the same route and the same counts. The public page records every one of these calls as simulated, inside the browser, with zero network model calls.
-
-| Class | Example question | What the example actually does | CA | PA |
-| --- | --- | --- | --- | --- |
-| CA only, one call | What can you help with? | One combined route and answer. No tool and no planner. | 1 | 0 |
-| CA only, two calls | How much is this item? | CA requests a quote. The snapshot tool returns the price and stock. CA writes the reply from that quote. | 2 | 0 |
-| CA plus PA, PA twice | browse drinkware under 20 | CA hands off. PA plans and requests one search. PA then finishes from that search. CA writes the reply. The extra budget check does not run. | 2 | 2 |
-| CA plus PA, PA more than twice | find drinkware under 20 | CA hands off. PA plans and requests a search. The search tool runs. PA then requests the budget check, which filters those items and calls no tool. PA then finishes. CA writes the reply. | 2 | 3 |
-
-The stock, return-window, known-shipment, missing-shipment, and membership-note cards are the same two-call communication-agent class as the price question. Comparing the Matte ceramic mug 350 ml with the Blue stoneware mug 350 ml is the more-than-twice planner class with a longer plan: PA 4 and CA 2, six recorded calls in total. Those four planner calls are the plan plus the first quote, the second quote, the compare, and the finish.
+The stock, shipment, and membership-note cards stay on the two-call communication-agent path because they read current snapshot facts. Comparing the mugs is still one planner call, not four.
 
 ### Public demo and a local endpoint
 
 The public page always uses the mock decisions above. It does not call a chat-completions model, and it has no field for an API key. The pauses while a reply appears are presentation timing, not model latency.
 
-A local server can call a real endpoint only after you set `SHOPASSIST_MODE=configured_endpoint` and `SHOPASSIST_OPT_IN_CONFIGURED_MODEL=yes`, and you provide a base URL and model name for each agent. That mode does not add the simulated records.
+A local server can call a real endpoint only after you set `SHOPASSIST_MODE=configured_endpoint` and `SHOPASSIST_OPT_IN_CONFIGURED_MODEL=yes`, and you provide a base URL and model name for each agent. FAQ rules still skip the endpoint. A matched complex turn calls the planner once. The planner must return `action: plan` and the full DAG. The runtime does not add simulated records on that path.
 
 1. The communication agent is one HTTP request. Its JSON chooses the route. For a direct answer or a clarification, that same response includes the reply text.
 2. A simple skill or a handoff still renders the price, stock, and policy sentences from tool evidence. The model does not supply those numbers.
-3. The planner is one HTTP request for each decision it returns. How many times it is called depends on the decisions it returns. It is not fixed to the counts in the table above.
+3. The planner is one HTTP request per complex turn. It is not called again after the DAG starts.
 4. Accepted planner goals are `search`, `recommend`, `compare`, and `oos`. The one-search browse plan is a mock-only demo path.
 5. A missing opt-in, a missing endpoint or model, HTTP 401, or invalid JSON fails the turn. The server does not silently switch back to the mock. HTTP 429 and 503 can be retried inside `loop.max_retries_per_step`.
 
@@ -193,7 +154,7 @@ Environment variables, all optional:
 
 The lab never ships a real credential. Local URLs may omit a credential. Non-local URLs must use the environment variable named above, not a credential embedded in the URL. Errors report missing variable names and whether a credential is present. They do not echo the value.
 
-The protocol is OpenAI-compatible `POST {base_url}/chat/completions` with `{"model","messages","temperature":0}`. The communication agent must return one JSON object: a route, and for a simple skill the skill id and arguments, or for a planner handoff a `goal_type` and `query`. Accepted planner goals remain `search`, `recommend`, `compare`, and `oos`. The public demo's one-search browse plan is mock-only and is not a configured-model goal. The planner agent returns the next action (`plan`, `tool_call`, `finish`, and the recovery actions). Configured mode records the endpoint calls and does not add simulated lifecycle events. Tools stay on the allowlisted synthetic catalog, policies, and shipments. The visible price, stock, and policy sentences are rendered from tool evidence and then checked by the evidence gate. The model does not get to invent those numbers. A missing opt-in, a missing endpoint or model, HTTP 401, or invalid JSON fails the request. The server does not answer with the mock policy. HTTP 429 and 503 can be retried inside `loop.max_retries_per_step`. This lab's automated tests use a local stub only. Compatibility with a live provider account was not verified.
+The protocol is OpenAI-compatible `POST {base_url}/chat/completions` with `{"model","messages","temperature":0}`. The communication agent must return one JSON object: a route, and for a simple skill the skill id and arguments, or for a planner handoff a `goal_type` and `query`. Accepted planner goals remain `search`, `recommend`, `compare`, and `oos`. The public demo's one-search browse plan is mock-only and is not a configured-model goal. The planner agent returns one JSON object whose action is `plan` and whose `plan` is the complete tool DAG. The runtime does not call it again for a later step. Configured mode records the endpoint calls and does not add simulated lifecycle events. Tools stay on the allowlisted synthetic catalog, policies, and shipments. The visible price, stock, and policy sentences are rendered from tool evidence and then checked by the evidence gate. The model does not get to invent those numbers. A missing opt-in, a missing endpoint or model, HTTP 401, or invalid JSON fails the request. The server does not answer with the mock policy. HTTP 429 and 503 can be retried inside `loop.max_retries_per_step`. This lab's automated tests use a local stub only. Compatibility with a live provider account was not verified.
 
 Example, with the key only in the environment of the machine that runs the server:
 

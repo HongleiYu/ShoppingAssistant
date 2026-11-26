@@ -9,15 +9,18 @@ The lab has four replaceable layers and one orchestrator.
 
 Session context is a profile, a seven-day recent memory, and the current session. The session input is the latest 10 messages, a summary through a watermark, and structured state. See `docs/memory.md`. `active_task_id` is set only while a planner task is running and is cleared before the turn is stored. The planner's observation list is not the session memory.
 
-A simple thanks, greeting, acknowledgement, or unrelated message is a direct answer. A policy or single-item price question uses one skill. Search, recommendation, comparison, stock recovery, and multi-step faults go to the planner.
+An exact FAQ sentence is answered before either agent. A greeting or an unrelated message still goes to the communication agent. A policy or single-item price question uses one skill. Search, recommendation, comparison, and stock recovery go to the planner once. That call returns a tool DAG. The runtime validates and executes it. It does not call the planner again to finish or replan. Tool retries stay inside the executor.
 
 ```mermaid
 flowchart TD
-  user[User turn] --> ca[Communication agent]
-  ca -->|direct, clarify, escalate| reply[Grounded reply]
+  user[User turn] --> rule[FAQ rule]
+  rule -->|exact FAQ| reply[Grounded reply]
+  rule -->|otherwise| ca[Communication agent]
+  ca -->|direct, clarify, escalate| reply
   ca -->|simple skill| skills[Skill executor]
-  ca -->|complex handoff| pa[Planner agent]
-  pa --> skills
+  ca -->|complex handoff| pa[Planner, one call]
+  pa --> dag[Validated tool DAG]
+  dag --> skills
   skills --> gateway[Allowlisted gateway]
   gateway --> client[MCP client]
   client --> server[MCP server process]

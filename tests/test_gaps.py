@@ -201,14 +201,13 @@ class ConfiguredModeTest(unittest.TestCase):
             clients = self._clients()
             policy = evaluate_card(cards["policy-returns"], mode="configured_endpoint", model_clients=clients)
             self.assertTrue(policy["score"]["passed"], policy["score"]["failures"])
-            self.assertEqual(policy["trace"]["evaluation_kind"], "configured_model")
-            self.assertGreater(policy["trace"]["model_call_count"], 0)
-            self.assertTrue(any(call["model"] == "ca-stub" for call in self.stub.calls))
-            self.assertFalse(any(call["model"] == "pa-stub" for call in self.stub.calls))
+            self.assertEqual(policy["trace"]["model_call_count"], 0)
+            self.assertEqual(self.stub.calls, [])
             self.assertNotIn(SENTINEL, json.dumps(policy["trace"]))
             search = evaluate_card(cards["search-sand"], mode="configured_endpoint", model_clients=clients)
             self.assertTrue(search["score"]["passed"], search["score"]["failures"])
-            self.assertTrue(any(call["model"] == "pa-stub" for call in self.stub.calls))
+            self.assertEqual(sum(1 for call in self.stub.calls if call["model"] == "pa-stub"), 1)
+            self.assertTrue(any(call["model"] == "ca-stub" for call in self.stub.calls))
             self.assertTrue(any(tool["tool"] == "catalog.search" for tool in search["trace"]["turns"][0]["tools"]))
             self.assertNotIn(SENTINEL, json.dumps(search["trace"]))
         finally:
@@ -236,19 +235,18 @@ class ConfiguredModeTest(unittest.TestCase):
             self.assertNotIn("base_url", json.dumps(created))
             ran = json.load(urllib.request.urlopen(urllib.request.Request(
                 f"http://127.0.0.1:{port}/api/sessions/{created['session_id']}/run",
-                data=json.dumps({"card_id": "policy-returns"}).encode(),
+                data=json.dumps({"card_id": "search-sand"}).encode(),
                 headers={"Content-Type": "application/json"},
             )))
             self.assertTrue(ran["passed"])
             self.assertEqual(ran["evaluation_kind"], "configured_model")
-            self.assertIn("30", ran["turns"][0]["reply_text"])
             self.assertNotIn(SENTINEL, json.dumps(ran))
             self.assertTrue(any(call["authorization"] == "Bearer " + SENTINEL for call in self.stub.calls))
             self.stub.invalid = True
             try:
                 urllib.request.urlopen(urllib.request.Request(
                     f"http://127.0.0.1:{port}/api/sessions/{created['session_id']}/message",
-                    data=json.dumps({"text": "Hello."}).encode(),
+                    data=json.dumps({"text": "What is the weather like today?"}).encode(),
                     headers={"Content-Type": "application/json"},
                 ))
                 self.fail("invalid model output should not succeed")

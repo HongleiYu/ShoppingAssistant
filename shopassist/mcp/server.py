@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import threading
 from pathlib import Path
 
 from shopassist.catalog import load_catalog
@@ -80,6 +81,7 @@ class ToolServer:
         self.workspace = workspace
         self.extra_tools = extra_tools or {}
         self.occurrences: dict[str, int] = {}
+        self._call_lock = threading.Lock()
         self.call_count = 0
         self.max_calls = int(profile.get("max_calls") or 30)
         self.kb_index = None
@@ -203,6 +205,8 @@ class ToolServer:
         declared = self.kb_encoder or {}
         top_k = int(arguments["top_k"]) if "top_k" in arguments else int(declared.get("top_k") or 5)
         threshold = float(arguments["threshold"]) if "threshold" in arguments else float(declared.get("score_threshold") or 0)
+        max_hits = declared.get("max_hits")
+        dedup = float(declared.get("dedup_cosine") or 0.92)
         try:
             return self.kb_index.search(
                 encoder,
@@ -210,6 +214,9 @@ class ToolServer:
                 corpus=corpus,
                 top_k=top_k,
                 threshold=threshold,
+                product_id=arguments.get("product_id") or None,
+                max_hits=None if max_hits is None else int(max_hits),
+                dedup_cosine=dedup,
             )
         except Exception as exc:  # IndexMismatch
             return {
@@ -236,6 +243,10 @@ class ToolServer:
         return quoted
 
     def call_tool(self, tool_name: str, arguments: dict) -> dict:
+        with self._call_lock:
+            return self._call_tool_locked(tool_name, arguments)
+
+    def _call_tool_locked(self, tool_name: str, arguments: dict) -> dict:
         self.call_count += 1
         if self.call_count > self.max_calls:
             data = {

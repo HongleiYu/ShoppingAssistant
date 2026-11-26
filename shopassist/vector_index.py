@@ -40,20 +40,41 @@ class VectorIndex:
             for token in set(_tokens(chunk["text"])):
                 self.document_frequency[token] = self.document_frequency.get(token, 0) + 1
 
-    def search(self, encoder, query: str, *, corpus: str | None = None, top_k: int = 5, threshold: float = 0.0) -> dict:
+    def search(
+        self,
+        encoder,
+        query: str,
+        *,
+        corpus: str | None = None,
+        top_k: int = 5,
+        threshold: float = 0.0,
+        product_id: str | None = None,
+        product_ids: list[str] | None = None,
+        max_hits: int | None = None,
+        dedup_cosine: float = 0.92,
+    ) -> dict:
+        from shopassist.retrieval import expand_query
+
         _require_compatible(encoder, self.manifest)
         if corpus not in {None, "", "policy", "product"}:
             raise IndexMismatch("unknown_corpus", {"corpus": corpus})
-        query_vector = encoder.encode([query or ""])[0]
-        query_tokens = set(_tokens(query or ""))
+        rewrite = expand_query(query or "")
+        # Score the original wording. Expansion only widens the lexical gate.
+        query_vector = encoder.encode([rewrite["original"]])[0]
+        gate_tokens = set(_tokens(rewrite["expanded"]))
         cutoff = max(1, int(0.05 * max(1, len(self.chunks))))
-        rare_tokens = [token for token in query_tokens if self.document_frequency.get(token, 0) <= cutoff]
-        needed = rare_tokens or list(query_tokens)
+        rare_tokens = [token for token in gate_tokens if self.document_frequency.get(token, 0) <= cutoff]
+        needed = rare_tokens or list(gate_tokens)
+        allowed = _product_scope(product_id, product_ids)
         ranked = []
+        filtered_out = 0
         for chunk, vector in zip(self.chunks, self.vectors):
             if corpus and chunk["corpus"] != corpus:
                 continue
-            # Hash buckets can collide. A hit must contain a rare query token,
+            if not _chunk_in_scope(chunk, allowed):
+                filtered_out += 1
+                continue
+            # Hash buckets can collide. A hit must share a rare query token,
             # or any query token when every token is common. This is lexical.
             hay = set(_tokens(chunk["text"]))
             if not needed or not any(token in hay for token in needed):
@@ -61,16 +82,29 @@ class VectorIndex:
             score = cosine(query_vector, vector)
             if score < float(threshold):
                 continue
-            ranked.append((score, chunk))
+            ranked.append((score, chunk, vector))
         ranked.sort(key=lambda item: (-item[0], item[1]["chunk_id"]))
-        hits = [_hit(score, chunk, encoder, self.manifest) for score, chunk in ranked[: max(0, int(top_k))]]
+        kept, dropped = _dedup(ranked, float(dedup_cosine))
+        cap = max(0, int(top_k))
+        if max_hits is not None:
+            cap = min(cap, max(0, int(max_hits)))
+        chosen = kept[:cap]
+        hits = [_hit(score, chunk, encoder, self.manifest) for score, chunk, _vector in chosen]
         status = "ok" if hits else "empty"
+        dedup_kind = "semantic_near_duplicate" if encoder.semantic else "lexical_near_duplicate"
         return {
             "status": status,
             "error_code": None if hits else "no_match",
             "hits": hits,
-            "query": query,
+            "query": rewrite["original"],
+            "query_rewrite": rewrite,
             "corpus": corpus or "all",
+            "product_ids": sorted(allowed) if allowed is not None else [],
+            "filtered_other_products": filtered_out if allowed is not None else 0,
+            "below_threshold_dropped": True,
+            "dedup_dropped": dropped,
+            "dedup_kind": dedup_kind,
+            "returned": len(hits),
             "encoder_kind": encoder.kind,
             "model_id": encoder.model_id,
             "encoder_version": encoder.version,
@@ -82,6 +116,7 @@ class VectorIndex:
             "kb_version": POLICY_VERSION,
             "snapshot_id": CATALOG_SNAPSHOT,
             "top_k": int(top_k),
+            "max_hits": None if max_hits is None else int(max_hits),
             "threshold": float(threshold),
         }
 
@@ -206,6 +241,7 @@ def chunk_corpus(policies: list[dict], products: list[dict], *, chunk_chars: int
                         "doc_id": document["doc_id"],
                         "section_id": section["section_id"],
                         "product_id": None,
+                        "scope": "global",
                         "title": document.get("title"),
                         "topic": document.get("topic"),
                         "freshness": document.get("freshness") or "current",
@@ -236,6 +272,7 @@ def chunk_corpus(policies: list[dict], products: list[dict], *, chunk_chars: int
                 "doc_id": product["product_id"],
                 "section_id": "record",
                 "product_id": product["product_id"],
+                "scope": "product",
                 "title": product["name"],
                 "topic": static.get("category"),
                 "freshness": product["dynamic"].get("freshness") or "current",
@@ -265,6 +302,38 @@ def _normalize(text: str) -> str:
     return " ".join((text or "").split())
 
 
+def _product_scope(product_id: str | None, product_ids: list[str] | None) -> set[str] | None:
+    allowed = set()
+    if product_id:
+        allowed.add(str(product_id))
+    for item in product_ids or []:
+        if item:
+            allowed.add(str(item))
+    return allowed or None
+
+
+def _chunk_in_scope(chunk: dict, allowed: set[str] | None) -> bool:
+    if allowed is None:
+        return True
+    scope = chunk.get("scope")
+    if scope is None:
+        scope = "global" if chunk.get("corpus") == "policy" and not chunk.get("product_id") else "product"
+    if scope == "global":
+        return True
+    return chunk.get("product_id") in allowed
+
+
+def _dedup(ranked: list[tuple], cosine_threshold: float) -> tuple[list[tuple], int]:
+    kept = []
+    dropped = 0
+    for score, chunk, vector in ranked:
+        if any(cosine(vector, previous[2]) >= cosine_threshold for previous in kept):
+            dropped += 1
+            continue
+        kept.append((score, chunk, vector))
+    return kept, dropped
+
+
 def _hit(score: float, chunk: dict, encoder, manifest: dict) -> dict:
     return {
         "score": round(float(score), 4),
@@ -279,6 +348,7 @@ def _hit(score: float, chunk: dict, encoder, manifest: dict) -> dict:
         "doc_id": chunk["doc_id"],
         "chunk_id": chunk["chunk_id"],
         "product_id": chunk.get("product_id"),
+        "scope": chunk.get("scope") or ("global" if chunk.get("corpus") == "policy" and not chunk.get("product_id") else "product"),
         "section_id": chunk.get("section_id"),
         "title": chunk.get("title"),
         "freshness": chunk.get("freshness"),
